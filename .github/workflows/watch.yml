@@ -6,8 +6,11 @@ name: watch
 # under load. Still well inside the "first hour or two" that decides a Belgrade listing.
 on:
   schedule:
-    # Every 5 minutes is the floor GitHub allows. Treat it as a request, not a promise.
-    - cron: "*/5 * * * *"
+    # Every 10 minutes, not the 5-minute floor. Two reasons, neither of them a diagnosis:
+    # GitHub throttles high-frequency schedules hardest and drops them first when Actions
+    # is backed up, and the effective cadence is 5-20 minutes either way, so asking for 5
+    # buys nothing real. Treat any cron here as a request, not a promise.
+    - cron: "*/10 * * * *"
   # So you can trigger a run by hand from the Actions tab, which is how you test changes.
   workflow_dispatch:
 

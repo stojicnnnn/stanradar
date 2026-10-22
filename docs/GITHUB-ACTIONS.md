@@ -10,14 +10,25 @@ it is a real downgrade, just not a fatal one.
 
 | | VPS | GitHub Actions |
 |---|---|---|
-| Poll interval | 60 seconds | 5 minutes, *requested* |
+| Poll interval | 60 seconds | 10 minutes, *requested* |
 | What actually happens | 60 seconds | **typically 5–20 min, occasionally longer** |
 | Cost | ~€5/month | free |
 | Card needed | yes | no |
 
 GitHub's own documentation says scheduled workflows "may be delayed during periods of high
-load", and 5-minute crons are the first thing to slip. Runs are occasionally skipped
-entirely. Plan for ~5–20 minutes, not 5.
+load", and the highest-frequency crons are the first thing to slip. Runs are occasionally
+skipped entirely. Plan for ~5–20 minutes.
+
+The cron asks for every 10 minutes rather than the 5-minute floor on purpose: GitHub drops
+frequent schedules first when Actions is backed up, and since the real cadence is 5–20
+minutes either way, asking for 5 buys nothing.
+
+**Expect the first scheduled run to be slow to appear.** On this repo it had not fired
+over 100 minutes — but GitHub Actions was under two overlapping incidents for that entire
+window, so that says nothing about your setup. Check
+[githubstatus.com](https://www.githubstatus.com) before concluding anything is wrong with
+the workflow; `workflow_dispatch` keeps working when scheduling does not, because the two
+are queued separately.
 
 Since Belgrade listings go in the first hour or two, that still puts you in the first wave —
 it just stops being *first*. If your card starts working, move to the VPS in
