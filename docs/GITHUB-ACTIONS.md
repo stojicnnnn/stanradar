@@ -36,11 +36,12 @@ So: public repo. There is no configuration that makes a private repo work at thi
 
 **Before you make it public, know what becomes visible.** No secrets are at risk — the
 webhook and API key live in GitHub Secrets, `.env` is gitignored and has never been
-committed (verified). What *is* visible is `config.yaml`: your budget, the areas you are
-looking in, and the `scoring.llm.notes` text, which currently names **Navigator Business
-Center in Blok 43** as your workplace. That is the only genuinely personal line. If you
-would rather not publish it, change it to something vague like "my office in Novi Beograd" —
-the commute filter does not read that text, so nothing breaks.
+committed (verified). What *is* visible is `config.yaml`: your budget and the areas you
+are looking in. The workplace has deliberately been reduced to "Blok 43, Novi Beograd"
+rather than naming the building, in both `config.yaml` and the commute anchor, since a
+public repo tied to your GitHub account would otherwise say exactly where you work. The
+commute filter never reads that prose, so making it vaguer costs nothing; making it more
+specific again is a one-line edit if you decide you do not care.
 
 ## Setup
 

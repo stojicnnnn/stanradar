@@ -29,11 +29,11 @@ from __future__ import annotations
 
 from .text import fold
 
-# Anchor: Navigator Business Center, Bulevar Milutina Milankovica 1Z, Blok 43, Novi Beograd.
+# Anchor: Bulevar Milutina Milankovica, Blok 43, Novi Beograd.
 # The "Milutina Milankovica" stop is ~55 m away and is served by lines 7A, 9A, 18N, 60,
 # 60L, 67, 70, 95, 612, E6 and EKO1, which is what makes the Novi Beograd blocks, Zemun
 # and the Cukarica side reachable without a change.
-NAVIGATOR = "Navigator Business Center, Blok 43, Novi Beograd"
+NAVIGATOR = "Blok 43, Bulevar Milutina Milankovica, Novi Beograd"
 
 # Specific area (folded) -> estimated door-to-door minutes by public transport.
 # Matched as substrings against the listing's location text, so "blok 45" matches

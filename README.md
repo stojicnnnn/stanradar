@@ -136,7 +136,7 @@ reach are across the Sava in Čukarica (Banovo brdo, Žarkovo) and in the west o
 ```yaml
 criteria:
   commute:
-    anchor: navigator      # Navigator Business Center, Blok 43, Novi Beograd
+    anchor: navigator      # Blok 43, Bul. Milutina Milankovica, Novi Beograd
     max_minutes: 25
     areas: {zarkovo: 18}   # corrections, merged over the built-in estimates
     unknown: include       # keep listings in areas the table does not recognise

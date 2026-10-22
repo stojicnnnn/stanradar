@@ -74,7 +74,7 @@ criteria:
   # measured routes. Correct any of them here as you learn the city; `areas` is merged
   # over the defaults.
   commute:
-    anchor: navigator            # Navigator Business Center, Blok 43, Novi Beograd
+    anchor: navigator            # Blok 43, Bul. Milutina Milankovica, Novi Beograd
     # 25, not 20, on purpose. The estimates are hand-made and easily +/-5 minutes out, and
     # the cheapest areas you can actually reach cluster just past 20: Bezanijska kosa and
     # Zarkovo at ~22, Ledine and Zemunske kapije at ~24. A hard 20 would cut out most of
@@ -182,8 +182,8 @@ scoring:
     # Free-text context the rules cannot express. This goes straight into the prompt.
     # EDIT THIS - it is the main thing that makes the AI scoring useful rather than generic.
     notes: |
-      I work at Navigator Business Center in Blok 43, Novi Beograd, and I commute by bus,
-      so a short and simple ride matters - one bus with no change is much better than two.
+      I work in Blok 43, Novi Beograd, and I commute by bus, so a short and simple ride
+      matters - one bus with no change is much better than two.
       My budget is tight, up to about 450 EUR, so I care more about the flat being clean,
       honest and liveable than about it being large or modern.
 
