@@ -101,35 +101,22 @@ the current stock.
 
 ### Keeping it running 24/7
 
-It is a single long-running process with a SQLite file for state, so anything that restarts a
-process works. The only real requirement is that it stays running — a laptop that sleeps will
-miss exactly the listings you care about, so a cheap always-on VPS or a Raspberry Pi is worth
-more here than any tuning.
+It is a single long-running process with a SQLite file for state, so anything that restarts
+a process works. The only real requirement is that it **stays running** — a laptop that
+sleeps will be asleep at 2am, which is exactly when you will miss listings. A €4–5/month VPS
+or a Raspberry Pi is worth more here than any amount of tuning.
 
-On Linux, as a user service (`~/.config/systemd/user/stanradar.service`):
-
-```ini
-[Unit]
-Description=stanradar
-[Service]
-WorkingDirectory=/home/you/stanradar
-ExecStart=/home/you/stanradar/.venv/bin/stanradar watch
-Restart=always
-RestartSec=30
-[Install]
-WantedBy=default.target
-```
-
-```bash
-systemctl --user enable --now stanradar
-journalctl --user -u stanradar -f
-```
+**[docs/DEPLOY.md](docs/DEPLOY.md)** has the full VPS setup: hardening, install, the
+systemd unit in [deploy/stanradar.service](deploy/stanradar.service), and the two traps
+that bite (user services need `loginctl enable-linger`, and `ReadWritePaths` directories
+must already exist).
 
 On Windows, Task Scheduler with "run whether user is logged on or not" and a trigger at
-startup, pointing at `.venv\Scripts\stanradar.exe watch`.
+startup, pointing at `.venv\Scripts\stanradar.exe watch`. Disable sleep, or it will not
+be running when it matters.
 
-If a portal fails five polls in a row you get one Discord warning, not one per cycle. Polling
-continues regardless — one portal being down never stops the others.
+If a portal fails five polls in a row you get one Discord warning, not one per cycle.
+Polling continues regardless — one portal being down never stops the others.
 
 ## Filtering by commute, not by district
 

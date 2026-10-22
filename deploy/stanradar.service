@@ -1,0 +1,44 @@
+[Unit]
+Description=stanradar - Belgrade rental monitor
+# Don't start before the network is actually usable, or the first cycle fails for nothing.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/stanradar
+ExecStart=%h/stanradar/.venv/bin/stanradar watch
+
+# No EnvironmentFile on purpose. The app calls load_dotenv() itself, and systemd's
+# EnvironmentFile parser is stricter than dotenv's - a value containing spaces or quotes
+# makes the whole unit refuse to start, which is a bad way to lose a monitor. Secrets are
+# read from .env by the app.
+
+# Always come back. A missed restart is a missed apartment.
+Restart=always
+RestartSec=30
+# ... but if it is crash-looping on a config error, stop hammering the portals.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+# Unbuffered, so journalctl shows the current cycle instead of a stale buffer.
+Environment=PYTHONUNBUFFERED=1
+
+# This process needs no inbound network, no privileges and nothing outside its own
+# directory, so take all of that away.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+# The repo directory, rather than just data/, because ReadWritePaths requires every path
+# to exist when the sandbox is built: pointing it at data/ makes the unit fail with an
+# obscure namespacing error on a fresh clone, before the app can create the directory.
+ReadWritePaths=%h/stanradar
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+MemoryMax=512M
+
+[Install]
+WantedBy=default.target

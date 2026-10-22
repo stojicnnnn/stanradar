@@ -28,7 +28,12 @@ criteria:
   # 20-minute ride and are materially cheaper than the central blocks.
   price_eur:
     min: 250                     # below this is usually a room, not a flat
-    max: 400
+    # 450 rather than 400. Measured on live data: 250-400 gives 108 Belgrade listings,
+    # 250-450 gives 146 - so about a third more, not the doubling the full 400-500 band
+    # count suggests. Within Novi Beograd proper it is only 9 -> 11; most of the gain is
+    # in Cukarica and Zemun, which the commute radius covers. The score still ranks
+    # cheaper flats higher, so a 440 EUR place must be visibly better to outrank a 380 one.
+    max: 450
   area_m2:
     min: 30                      # at this budget, 30 m2 is a realistic floor
     max: 90
@@ -40,7 +45,11 @@ criteria:
     min: 0.5
   floor:
     min: 0                       # 0 = ground floor; -1 is suteren, -2 is a cellar
-  max_price_per_m2: 14           # 400 EUR for 30 m2 is 13.3/m2
+  # Deliberately slack: with price capped at 450 and area floored at 30, the worst case is
+  # already 15/m2, so this almost never binds. It is kept as a guard against bad data (a
+  # mis-typed area turning a flat into a bargain), not as a real filter - at this budget an
+  # extra redundant filter is a way to silently lose listings.
+  max_price_per_m2: 15
 
   min_images: 2                  # no-photo ads are almost always agency bait
   owners_only: null              # null = both, true = owners only, false = agencies only
