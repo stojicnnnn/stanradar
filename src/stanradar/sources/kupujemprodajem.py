@@ -36,7 +36,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from ..models import Listing
-from ..text import first_number, parse_floor, parse_rooms
+from ..text import detect_furnished, first_number, parse_floor, parse_rooms
 from .base import Source
 
 log = logging.getLogger(__name__)
@@ -124,6 +124,11 @@ class KupujemProdajem(Source):
             images=images,
             posted_at=_parse_posted(ad.get("posted")),
             advertiser="private owner" if ad.get("show_directly_from_owner") else None,
+            # KP has no structured furnishing attribute; enrich() re-checks against the
+            # full description, which is far more likely to mention it than the snippet.
+            furnished=detect_furnished(
+                ad.get("name_decoded"), ad.get("description_snippet_decoded")
+            ),
             # KP's own badge for "directly from owner"; absent means a reseller or agency.
             is_agency=not ad["show_directly_from_owner"]
             if "show_directly_from_owner" in ad
@@ -182,6 +187,9 @@ def _parse_posted(value: str | None) -> datetime | None:
 
         if ad.get("description"):
             listing.description = _strip_html(ad["description"])
+            furnished = detect_furnished(listing.title, listing.description)
+            if furnished is not None:
+                listing.furnished = furnished
 
         user = ad.get("user") or {}
         if user.get("username"):

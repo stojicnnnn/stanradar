@@ -28,7 +28,7 @@ from selectolax.lexbor import LexborHTMLParser as HTMLParser
 from selectolax.lexbor import LexborNode as Node
 
 from ..models import Listing
-from ..text import first_number, parse_floor, parse_price_eur, parse_rooms
+from ..text import detect_furnished, first_number, parse_floor, parse_price_eur, parse_rooms
 from .base import Source
 
 log = logging.getLogger(__name__)
@@ -121,6 +121,8 @@ class HaloOglasi(Source):
             images=[image] if image.startswith("http") else [],
             posted_at=_parse_date(_text(item.css_first(".publish-date"))),
             advertiser=_text(advertiser_node) or None,
+            # Not a structured field on this portal, so the text is all we have.
+            furnished=detect_furnished(_text(link), _text(item.css_first("p.product-description"))),
             is_agency=(advertiser_kind == "agencija") if advertiser_kind else None,
             raw={"photo_count": _text(item.css_first(".pi-img-count-num"))},
         )

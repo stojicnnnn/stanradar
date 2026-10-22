@@ -159,3 +159,33 @@ def test_owners_only_filter_rejects_agencies():
 def test_unknown_price_passes_only_without_a_floor():
     assert not evaluate(listing(price_eur=None), criteria()).passed
     assert evaluate(listing(price_eur=None), criteria(price_eur=Range())).passed
+
+
+def test_furnished_filter_is_off_by_default():
+    assert evaluate(listing(furnished=False), criteria()).passed
+    assert evaluate(listing(furnished=True), criteria()).passed
+
+
+def test_an_empty_flat_is_not_penalised_against_a_furnished_one():
+    """Empty flats are an accepted option, so furnishing must not move the score.
+
+    The earlier default config gave bonuses for a washing machine and dishwasher, which
+    only a furnished flat can earn, so furnished quietly outranked empty.
+    """
+    empty = evaluate(listing(furnished=False), criteria()).score
+    furnished = evaluate(listing(furnished=True), criteria()).score
+    assert empty == furnished
+
+
+def test_the_furnished_filter_can_be_narrowed_when_asked():
+    only_empty = criteria(furnished="unfurnished")
+    assert evaluate(listing(furnished=False), only_empty).passed
+    rejected = evaluate(listing(furnished=True), only_empty)
+    assert not rejected.passed
+    assert rejected.rejected_for == "furnished"
+
+
+def test_listings_that_do_not_state_furnishing_are_always_kept():
+    """Most portals never say, so dropping silence would cost far more than it saves."""
+    for want in ("furnished", "unfurnished"):
+        assert evaluate(listing(furnished=None), criteria(furnished=want)).passed

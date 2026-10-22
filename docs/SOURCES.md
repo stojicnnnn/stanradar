@@ -70,6 +70,23 @@ pre-filters only broadly and does the precise filtering locally — which is the
 anyway, since a listing with a mis-tagged `structure` or missing `furnished` field still
 reaches you instead of being silently dropped server-side.
 
+**Only two portals state whether a flat is furnished.** This matters because an empty
+flat is materially cheaper and means buying everything, so it belongs in the alert rather
+than buried in the description. Coverage, measured over a live page from each:
+
+| Portal | Source of truth | Coverage seen |
+|---|---|---|
+| 4zida.rs | `furnished: "yes"/"no"` on the **detail** payload (absent from search) | every enriched listing |
+| oglasi.rs | `Opremljenost` structured field | ~100% (20 furnished, 4 empty of 24) |
+| halooglasi.com | free text only | ~35% |
+| kupujemprodajem.com | free text only, re-checked against the full description in `enrich()` | ~40% |
+| nekretnine.rs | `arredato` in the Italian-named `ga4features` list; absence proves nothing | ~25% |
+
+Everything else falls back to text detection, and a listing that never says is kept rather
+than guessed at. One trap worth knowing: **"nenamesten" (unfurnished) contains "namesten"
+(furnished) as a substring**, as does "polunamesten", so the negative patterns have to be
+tested first - matching the positives first reads every empty flat as furnished.
+
 **The portals disagree about what a studio is.** 4zida encodes a garsonjera as
 `roomCount: 0.5`, while halooglasi, oglasi.rs and kupujemprodajem call the same thing 1.0.
 A `rooms.min` of 1.0 therefore silently drops every 4zida studio - which, at the bottom of

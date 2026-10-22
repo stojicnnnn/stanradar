@@ -151,3 +151,42 @@ def _roman(s: str) -> int:
         total += -v if v < prev else v
         prev = max(prev, v)
     return total
+
+
+# Furnishing, in the words the portals and landlords actually use.
+#
+# ORDER MATTERS: the negatives are checked first because "nenamesten" (unfurnished)
+# contains "namesten" (furnished) as a substring, as does "polunamesten". Checking the
+# positives first would read every unfurnished flat as furnished - the exact opposite of
+# the truth, and on a listing where it is one of the biggest cost differences there is.
+_UNFURNISHED = (
+    "nenamesten",
+    "ne namesten",
+    "nije namesten",
+    "neopremljen",
+    "prazan stan",
+    "prazan",
+    "bez stvari",
+    "bez namestaja",
+)
+_SEMI_FURNISHED = ("polunamesten", "polu namesten", "delimicno namesten", "delimicno opremljen")
+_FURNISHED = ("namesten", "opremljen", "komplet namesten", "ukljucen namestaj", "sa namestajem")
+
+
+def detect_furnished(*texts: str | None) -> bool | None:
+    """True if furnished, False if empty, None if the text does not say.
+
+    None is a real answer, not a failure: most listings simply do not mention it, and
+    guessing would be worse than admitting we don't know. Semi-furnished counts as True,
+    since the practical question is "do I have to buy everything".
+    """
+    haystack = fold(" ".join(t for t in texts if t))
+    if not haystack:
+        return None
+    if any(word in haystack for word in _UNFURNISHED):
+        return False
+    if any(word in haystack for word in _SEMI_FURNISHED):
+        return True
+    if any(word in haystack for word in _FURNISHED):
+        return True
+    return None

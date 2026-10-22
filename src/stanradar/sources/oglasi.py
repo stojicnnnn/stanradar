@@ -28,7 +28,7 @@ from selectolax.lexbor import LexborHTMLParser as HTMLParser
 from selectolax.lexbor import LexborNode as Node
 
 from ..models import Listing
-from ..text import first_number, parse_price_eur, parse_rooms
+from ..text import detect_furnished, first_number, parse_price_eur, parse_rooms
 from .base import Source
 
 log = logging.getLogger(__name__)
@@ -87,12 +87,14 @@ class Oglasi(Source):
         image_node = article.css_first("img[itemprop='image']")
 
         advertiser = _advertiser(article)
+        title = _text(article.css_first("h2[itemprop='name']")) or _text(link)
+        description = _text(article.css_first("p[itemprop='description']"))
         return Listing(
             source=self.name,
             external_id=match.group(1),
             url=BASE + href,
-            title=_text(article.css_first("h2[itemprop='name']")) or _text(link),
-            description=_text(article.css_first("p[itemprop='description']")),
+            title=title,
+            description=description,
             price_eur=parse_price_eur(_text(article.css_first("span.text-price"))),
             area_m2=first_number(details.get("kvadratura")),
             rooms=parse_rooms(details.get("sobnost")),
@@ -106,8 +108,12 @@ class Oglasi(Source):
             advertiser=advertiser,
             # "Reg. br." is the agency registration number every licensed agency must show.
             is_agency=("reg. br" in advertiser.lower()) if advertiser else None,
+            # "Opremljenost" is a structured field here, so prefer it over the free text.
+            furnished=detect_furnished(details.get("opremljenost"))
+            if details.get("opremljenost")
+            else detect_furnished(title, description),
             raw={
-                "furnished": details.get("opremljenost"),
+                "furnished_raw": details.get("opremljenost"),
                 "heating": details.get("grejanje"),
             },
         )

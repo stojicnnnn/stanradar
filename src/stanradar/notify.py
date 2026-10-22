@@ -44,6 +44,15 @@ def _who(listing: Listing) -> str:
     return "owner" if listing.is_agency is False else "-"
 
 
+def _furnishing(listing: Listing) -> str:
+    """An empty flat means buying a bed, a fridge and a washing machine, so say so."""
+    if listing.furnished is True:
+        return "furnished"
+    if listing.furnished is False:
+        return "empty - needs furnishing"
+    return "not stated"
+
+
 class Discord:
     def __init__(self, cfg: DiscordConfig, client: httpx.AsyncClient):
         self.cfg = cfg
@@ -81,6 +90,7 @@ class Discord:
                 else (str(listing.floor) if listing.floor is not None else "-"),
             ),
             _field("Advertiser", listing.advertiser or _who(listing)),
+            _field("Furnished", _furnishing(listing)),
             _field("Score", f"rules {rules.score}" + (f" | AI {verdict.fit}" if verdict else "")),
             _field("Source", listing.source),
         ]

@@ -27,7 +27,9 @@ criteria:
   # Julino brdo) and western Novi Beograd (Bezanijska kosa, Ledine) are both inside a
   # 20-minute ride and are materially cheaper than the central blocks.
   price_eur:
-    min: 250                     # below this is usually a room, not a flat
+    # 200. Belgrade has ~13 listings in 200-250 and ~8 below 200; below 200 is almost
+    # always a room rather than a flat, and the area and rooms filters catch those anyway.
+    min: 200
     # 450 rather than 400. Measured on live data: 250-400 gives 108 Belgrade listings,
     # 250-450 gives 146 - so about a third more, not the doubling the full 400-500 band
     # count suggests. Within Novi Beograd proper it is only 9 -> 11; most of the gain is
@@ -51,8 +53,19 @@ criteria:
   # extra redundant filter is a way to silently lose listings.
   max_price_per_m2: 15
 
-  min_images: 2                  # no-photo ads are almost always agency bait
+  # 1, not 2: reject only ads with no photo at all. An empty flat has less to photograph,
+  # and owner-posted ads (especially on kupujemprodajem) often carry a single picture - so
+  # a floor of 2 was discarding exactly the cheap, owner-direct, empty listings you want.
+  # "Suspiciously few photos" is a judgement, not a count, and the AI pass already treats
+  # a missing kitchen or bathroom shot as a warning sign.
+  min_images: 1
   owners_only: null              # null = both, true = owners only, false = agencies only
+
+  # any | furnished | unfurnished. "any" because an empty flat is a real option when it is
+  # cheap enough to pay for the furniture. Listings that never state it are always kept -
+  # most do not say, and most portals have no structured field for it at all (only 4zida
+  # and oglasi.rs do; the rest are detected from the text).
+  furnished: any
   max_age_minutes: null          # null = no limit; 120 would mean "only the last 2 hours"
 
   # Travel-time radius to work, which is the real criterion - it correctly includes the
@@ -138,8 +151,9 @@ criteria:
       klima: 3
       centralno grejanje: 4
       gradsko grejanje: 4
-      ves masina: 2
-      sudo masina: 2
+      # No washing-machine / dishwasher bonuses here on purpose. Only a furnished flat can
+      # earn them, so they quietly ranked furnished above empty - and you treat both as
+      # options. Fixtures that stay with the flat (lift, heating, A/C) are fair game.
       miran: 2
       svetao: 2
       ljubimci: 3
@@ -170,10 +184,18 @@ scoring:
     notes: |
       I work at Navigator Business Center in Blok 43, Novi Beograd, and I commute by bus,
       so a short and simple ride matters - one bus with no change is much better than two.
-      My budget is tight at 400 EUR, so I care more about the flat being clean, honest and
-      liveable than about it being large or modern. Flag anything that looks like the photos
-      are hiding the real condition, and flag listings that are really rooms or shared flats
-      advertised as whole apartments.
+      My budget is tight, up to about 450 EUR, so I care more about the flat being clean,
+      honest and liveable than about it being large or modern.
+
+      An unfurnished, empty flat is completely fine - I am willing to buy furniture if the
+      rent is low enough to justify it, which for me means roughly under 350 EUR. So do not
+      treat an empty flat as a negative. Do judge whether it is empty in a liveable way
+      (working kitchen fittings, a real bathroom, floors and windows in good order) or empty
+      because it is unfinished or run down, and say which. If the kitchen has no cabinets or
+      no sink, that is a real cost and worth calling out.
+
+      Flag anything that looks like the photos are hiding the real condition, and flag
+      listings that are really rooms or shared flats advertised as whole apartments.
 
 discord:
   webhook_url: ${DISCORD_WEBHOOK_URL}

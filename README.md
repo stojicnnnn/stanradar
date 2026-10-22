@@ -16,8 +16,8 @@ poll portals -> drop what you'd never take -> fetch the details -> read the phot
 Five portals are polled every 60 seconds (see [docs/SOURCES.md](docs/SOURCES.md) for the
 full list and what was found when each was probed). Each new listing goes through:
 
-1. **Hard filters** — price, size, rooms, floor, €/m², commute time, deal-breaker keywords.
-   Cheap and instant, so a listing that is out of budget costs nothing.
+1. **Hard filters** — price, size, rooms, floor, €/m², commute time, furnishing,
+   deal-breaker keywords. Cheap and instant, so an out-of-budget listing costs nothing.
 2. **Detail fetch** — only for listings that got past step 1, so detail requests are never
    wasted on a flat you'd never take.
 3. **Rule score (0–100)** — how good a deal it is on the numbers: price within your band,
@@ -161,7 +161,7 @@ Costs: the portals are free. The AI scoring is the only running cost, and it is 
 ## Development
 
 ```bash
-pytest          # 68 tests, no network
+pytest          # 76 tests, no network
 ruff check src tests
 ```
 
@@ -173,6 +173,7 @@ The code is organised so that adding a portal means writing one file:
 | `models.py` | The normalized `Listing` every adapter produces. |
 | `scoring.py` | Hard filters and the rule score. |
 | `commute.py` | Travel-time estimates per area, and the anchor table. |
+| `text.py` | Serbian text folding, and parsing of rooms, floors and furnishing. |
 | `llm.py` | The Claude vision call and its structured verdict. |
 | `store.py` | SQLite de-duplication and alert history. |
 | `notify.py` | Discord embeds. |

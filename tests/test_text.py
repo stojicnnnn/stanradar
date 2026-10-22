@@ -1,4 +1,11 @@
-from stanradar.text import first_number, fold, parse_floor, parse_price_eur, parse_rooms
+from stanradar.text import (
+    detect_furnished,
+    first_number,
+    fold,
+    parse_floor,
+    parse_price_eur,
+    parse_rooms,
+)
 
 
 def test_fold_handles_latin_diacritics_and_cyrillic():
@@ -48,3 +55,32 @@ def test_parse_floor_handles_roman_numerals_and_basements():
     assert parse_floor("SUT/5") == (-1, 5)
     assert parse_floor("PSUT/2") == (-2, 2)
     assert parse_floor(None) == (None, None)
+
+
+def test_detect_furnished_reads_the_serbian_words():
+    assert detect_furnished("Kompletno namešten stan") is True
+    assert detect_furnished("Polunamešten") is True            # some furniture counts
+    assert detect_furnished("delimično opremljen") is True
+    assert detect_furnished("Prazan stan bez stvari") is False
+    assert detect_furnished("izdaje se prazan") is False
+
+
+def test_unfurnished_is_not_read_as_furnished():
+    """The substring trap: "nenamesten" contains "namesten".
+
+    Checking the positive words first would read every unfurnished flat as furnished -
+    backwards on one of the biggest cost differences in a listing.
+    """
+    for text in ["Nenamešten stan", "ne namešten", "nije namešten", "NENAMEŠTENO"]:
+        assert detect_furnished(text) is False, text
+
+
+def test_silence_about_furnishing_is_not_a_guess():
+    # Most listings never mention it; None is the honest answer.
+    assert detect_furnished("Lep stan na Vračaru, 3. sprat") is None
+    assert detect_furnished(None) is None
+    assert detect_furnished("") is None
+
+
+def test_detect_furnished_searches_all_given_texts():
+    assert detect_furnished("Dvosoban stan", "Stan je nenamešten.") is False

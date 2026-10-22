@@ -123,6 +123,15 @@ def evaluate(listing: Listing, criteria: Criteria, full_detail: bool = True) -> 
     ):
         return RuleResult(False, rejected_for="no required keyword")
 
+    # Only filter when the listing actually states it; `None` means the portal was silent.
+    if criteria.furnished != "any" and listing.furnished is not None:
+        wants_furnished = criteria.furnished == "furnished"
+        if listing.furnished is not wants_furnished:
+            return RuleResult(
+                False,
+                rejected_for="furnished" if listing.furnished else "unfurnished",
+            )
+
     if criteria.owners_only is not None and listing.is_agency is not None:
         if criteria.owners_only and listing.is_agency:
             return RuleResult(False, rejected_for="agency listing")

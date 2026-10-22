@@ -31,6 +31,9 @@ class Listing:
     posted_at: datetime | None = None
     advertiser: str | None = None
     is_agency: bool | None = None
+    # True furnished, False empty, None not stated. An empty flat is cheaper but means
+    # buying everything, so this belongs in the alert rather than only in the score.
+    furnished: bool | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
     @property

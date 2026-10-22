@@ -23,7 +23,7 @@ import logging
 import re
 
 from ..models import Listing
-from ..text import first_number
+from ..text import detect_furnished, first_number
 from .base import Source
 
 log = logging.getLogger(__name__)
@@ -105,6 +105,12 @@ class Nekretnine(Source):
             posted_at=None,  # not present in the list payload
             advertiser=advertiser,
             is_agency=bool(agency),
+            # The platform is Immobiliare's, so the feature list is in Italian. Presence
+            # of "arredato" means furnished; absence proves nothing, since the list is
+            # often incomplete - hence the fall back to the text.
+            furnished=True
+            if "arredato" in (prop.get("ga4features") or [])
+            else detect_furnished(estate.get("title"), prop.get("caption")),
             raw={
                 "elevator": prop.get("elevator"),
                 "heating": prop.get("ga4Heating"),

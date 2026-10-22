@@ -22,6 +22,7 @@ from datetime import datetime
 from typing import Any
 
 from ..models import Listing
+from ..text import detect_furnished
 from .base import Source
 
 log = logging.getLogger(__name__)
@@ -131,6 +132,14 @@ class FourZida(Source):
             listing.is_agency = True
         else:
             listing.is_agency = False
+
+        # The detail payload states this explicitly as "yes"/"no".
+        furnished = detail.get("furnished")
+        if furnished in ("yes", "no"):
+            listing.furnished = furnished == "yes"
+        else:
+            listing.furnished = detect_furnished(listing.title, listing.description)
+        listing.raw["heating"] = detail.get("heatingType")
 
         if detail.get("url"):
             listing.url = detail["url"]

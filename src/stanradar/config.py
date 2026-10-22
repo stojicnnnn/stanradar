@@ -67,6 +67,9 @@ class Criteria(BaseModel):
     keywords: Keywords = Keywords()
     # None = no preference, True = only private owners, False = only agencies.
     owners_only: bool | None = None
+    # "any" | "furnished" | "unfurnished". Listings that do not state it are always kept,
+    # because most do not say and dropping them would cost more than it saves.
+    furnished: Literal["any", "furnished", "unfurnished"] = "any"
     max_age_minutes: int | None = None
 
 
