@@ -1,0 +1,48 @@
+[project]
+name = "stanradar"
+version = "0.1.0"
+description = "24/7 Belgrade apartment monitor with Discord alerts and AI fit scoring"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "selectolax>=1.0",
+    "curl_cffi>=0.7",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "anthropic>=0.40",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.6"]
+
+[project.scripts]
+stanradar = "stanradar.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/stanradar"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "C4", "UP"]
+ignore = [
+    # Broad excepts here are the design, not an oversight: a 24/7 poller must survive one
+    # portal changing its markup, so the per-item and per-source handlers log and carry on
+    # rather than letting one bad card take down the cycle.
+    "BLE001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The HTML fixtures are copied verbatim off the wire; rewrapping them would stop them
+# testing what the portals actually send.
+"tests/test_sources.py" = ["E501"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"

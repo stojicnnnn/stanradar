@@ -1,0 +1,21 @@
+# secrets & local state
+.env
+*.db
+*.db-journal
+*.sqlite3
+data/
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+# local config (keep config.example.yaml tracked)
+config.yaml
+# os
+Thumbs.db
+.DS_Store

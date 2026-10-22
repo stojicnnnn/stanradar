@@ -1,0 +1,140 @@
+# stanradar configuration.
+#
+# Copy to config.yaml and edit. config.yaml is gitignored, config.example.yaml is not,
+# so keep secrets out of here - use ${ENV_VAR} and put the value in .env.
+#
+# The values below are a starting point, not a recommendation. The three things worth
+# editing before the first run are: criteria.price_eur, criteria.area_m2 and
+# criteria.districts.
+
+poll_interval_seconds: 60        # 60s is polite and still beats almost everyone to a listing
+request_timeout_seconds: 25
+max_detail_fetches_per_cycle: 25 # cap on detail-page requests per portal per cycle
+fingerprint_ttl_hours: 72        # how long to suppress the same flat re-posted elsewhere
+database_path: data/stanradar.db
+
+# Run `stanradar sources` to see what is available and what is not implemented yet.
+sources:
+  - fourzida
+  - halooglasi
+  - nekretnine
+  - oglasi
+
+criteria:
+  price_eur:
+    min: 400
+    max: 900
+  area_m2:
+    min: 35
+    max: 90
+  rooms:
+    min: 1.5
+  floor:
+    min: 0                       # 0 = ground floor; -1 is suteren, -2 is a cellar
+  max_price_per_m2: 20           # a 60 m2 flat at 900 EUR is 15/m2
+
+  min_images: 2                  # no-photo ads are almost always agency bait
+  owners_only: null              # null = both, true = owners only, false = agencies only
+  max_age_minutes: null          # null = no limit; 120 would mean "only the last 2 hours"
+
+  districts:
+    # Matched as folded substrings against the listing's location text, so "vracar"
+    # also matches "Opstina Vracar" and "Vračar".
+    preferred:
+      - vracar
+      - stari grad
+      - dorcol
+      - centar
+      - savamala
+      - neimar
+      - crveni krst
+      - kalenic
+      - senjak
+      - banovo brdo
+    acceptable:
+      - zvezdara
+      - vozdovac
+      - dusanovac
+      - autokomanda
+      - sumice
+      - novi beograd
+      - zemun
+      - mirijevo
+      - karaburma
+      - lekino brdo
+    excluded:
+      - borca
+      - ovca
+      - krnjaca
+      - padinska skela
+      - surcin
+      - batajnica
+      - obrenovac
+      - lazarevac
+      - barajevo
+      - mladenovac
+      - grocka
+      - sopot
+
+  keywords:
+    # If set, a listing must contain at least one of these. Empty = no requirement.
+    required_any: []
+
+    # Any of these disqualifies the listing outright.
+    blocked:
+      - na dan
+      - dnevno izdavanje
+      - kratkorocno
+      - turisticko
+      - suteren
+      - podrumski
+      - bez grejanja
+      - sustanar
+      - deljenje stana
+      - krevet u
+
+    # Added to the score when present.
+    bonus:
+      renoviran: 8
+      novogradnja: 6
+      lift: 5
+      terasa: 4
+      parking: 4
+      garaza: 4
+      klima: 3
+      centralno grejanje: 4
+      gradsko grejanje: 4
+      ves masina: 2
+      sudo masina: 2
+      miran: 2
+      svetao: 2
+      ljubimci: 3
+
+    # Subtracted when present.
+    penalty:
+      bez lifta: 5
+      poslednji sprat: 3
+      dvorisni: 4
+      prolazna soba: 5
+      etazno grejanje: 2        # on gas, this gets expensive in winter
+      ta pec: 6                 # electric storage heater; expensive and slow
+
+scoring:
+  alert_threshold: 60           # below this, the listing is recorded but not sent
+
+  llm:
+    enabled: true               # needs ANTHROPIC_API_KEY; set false for rules-only
+    model: claude-opus-5-5
+    effort: low                 # low | medium | high | xhigh | max
+    max_images: 4               # photos sent per listing
+    min_rule_score: 45          # listings below this never reach the model
+    # Free-text context the rules cannot express. This goes straight into the prompt.
+    notes: |
+      I work from home, so a quiet flat and a room that can hold a desk matter more than
+      being close to nightlife. I would rather have a smaller renovated flat than a big
+      tired one. A proper separate kitchen is a plus, a windowless bathroom is a minus.
+
+discord:
+  webhook_url: ${DISCORD_WEBHOOK_URL}
+  mention: ""                   # e.g. "@here" or "<@your_user_id>"
+  mention_min_score: 85         # only ping for the genuinely good ones
