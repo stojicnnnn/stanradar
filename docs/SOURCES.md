@@ -37,6 +37,27 @@ nothing. What is missing is implementation, not investigation:
 | **gohome.rs, mojanekretnina.rs, estitor.com, roommateor.com, izdavanje.org** | Aggregators. They re-publish the same listings already covered above, usually with a delay, which is the opposite of what this tool is for. Monitoring them would mostly generate duplicate alerts. |
 | **Facebook groups** | Genuinely fast and full of owner listings, but there is no legitimate automated path: the Graph API has not exposed group posts to non-admin third-party apps since 2020, and scraping the logged-in feed breaks Facebook's terms and risks the account doing it. A fresh account makes this *worse*, not better - new account plus automation is the exact pattern their anti-automation systems flag. The practical substitute is per-group push notifications on your phone, which are free, instant and allowed. Much of this supply also cross-posts to kupujemprodajem, which is covered above. |
 
+## Houses
+
+Houses live behind a different endpoint or URL on every portal, so asking for them changes
+what gets fetched, not just what is kept:
+
+| Portal | Houses | How |
+|---|---|---|
+| 4zida.rs | yes, ~450 in Belgrade | `GET /v6/search/houses`, identical response shape |
+| oglasi.rs | yes | `/nekretnine/izdavanje-kuca/beograd` |
+| kupujemprodajem.com | yes | a second keyword search; results come back in the `Kuće` group |
+| halooglasi.com | yes | `/nekretnine/izdavanje-kuca/beograd` (unused while IP-blocked) |
+| **nekretnine.rs** | **no** | see below |
+
+**nekretnine.rs serves apartments only.** Every guessable house-rental URL 404s
+(`/izdavanje-kuca/beograd/`, `/iznajmljivanje-kuca/…`, and four other patterns), and the one
+path that does resolve — `/stambeni-objekti/kuce/grad/beograd/izdavanje/` — silently returns
+houses **for sale** (`idContratto=1`), the same trap as the apartment URL. Its own payload
+contains no link to a house-rental page either. Rather than risk quietly mixing sale
+listings into a rental search, this source declines houses outright; the other three cover
+them.
+
 ## Things worth knowing about these sites
 
 **Two of them fingerprint TLS.** halooglasi.com and nekretnine.rs return `403` to any request

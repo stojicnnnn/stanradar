@@ -56,9 +56,19 @@ class Commute(BaseModel):
 
 
 class Criteria(BaseModel):
+    # Which kinds of property to consider. Houses come from a different endpoint or URL on
+    # every portal, so asking for them changes what gets fetched, not just what is kept.
+    property_types: list[Literal["apartment", "house"]] = Field(
+        default_factory=lambda: ["apartment"]
+    )
     price_eur: Range = Range()
     area_m2: Range = Range()
     rooms: Range = Range()
+    # Bedrooms, NOT rooms. In Serbian listings "soba" counts the living room, so a
+    # trosoban (3 rooms) has 2 bedrooms and a cetvorosoban (4) has 3. Verified against
+    # nekretnine.rs, the one portal that publishes both numbers. Filtering on `rooms`
+    # when you mean bedrooms silently returns flats one bedroom short.
+    bedrooms: Range = Range()
     floor: Range = Range()
     max_price_per_m2: float | None = None
     min_images: int = 0
@@ -95,6 +105,15 @@ class DiscordConfig(BaseModel):
     mention_min_score: int = 85
 
 
+class Profile(BaseModel):
+    """One named search. Several can run against the same fetched listings."""
+
+    name: str
+    criteria: Criteria = Criteria()
+    scoring: Scoring = Scoring()
+    discord: DiscordConfig = DiscordConfig()
+
+
 class Config(BaseModel):
     poll_interval_seconds: int = 60
     request_timeout_seconds: int = 25
@@ -102,14 +121,49 @@ class Config(BaseModel):
     fingerprint_ttl_hours: int = 72
     database_path: str = "data/stanradar.db"
     sources: list[str] = Field(default_factory=lambda: ["fourzida"])
+    # Top-level criteria/scoring/discord are the DEFAULTS every profile inherits. A profile
+    # overrides them field by field, so a second search does not have to repeat the whole
+    # keyword and district configuration.
     criteria: Criteria = Criteria()
     scoring: Scoring = Scoring()
     discord: DiscordConfig = DiscordConfig()
+    profiles: list[Profile] = Field(default_factory=list)
+
+    @property
+    def property_types(self) -> set[str]:
+        """Union across profiles - what actually has to be fetched."""
+        types: set[str] = set()
+        for profile in self.profiles:
+            types.update(profile.criteria.property_types)
+        return types or {"apartment"}
 
     @classmethod
     def load(cls, path: str | Path) -> Config:
-        raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
-        return cls.model_validate(_expand(raw))
+        raw = _expand(yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {})
+
+        # Build each profile by layering its overrides onto the top-level defaults.
+        defaults = {key: raw.get(key, {}) for key in ("criteria", "scoring", "discord")}
+        profiles = []
+        for entry in raw.pop("profiles", None) or [{"name": "default"}]:
+            merged = {k: _merge(defaults.get(k, {}), entry.get(k, {})) for k in defaults}
+            merged["name"] = entry.get("name", "default")
+            profiles.append(merged)
+        raw["profiles"] = profiles
+        return cls.model_validate(raw)
+
+
+def _merge(base: Any, override: Any) -> Any:
+    """Recursive dict merge; `override` wins. Lists replace rather than concatenate.
+
+    Replacing is the right default for a list of districts or keywords: a profile that
+    names its own excluded areas means *those*, not those plus the inherited ones.
+    """
+    if isinstance(base, dict) and isinstance(override, dict):
+        out = dict(base)
+        for key, value in override.items():
+            out[key] = _merge(out[key], value) if key in out else value
+        return out
+    return override if override != {} else base
 
 
 def _expand(obj: Any) -> Any:

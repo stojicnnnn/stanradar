@@ -126,6 +126,41 @@ be running when it matters.
 If a portal fails five polls in a row you get one Discord warning, not one per cycle.
 Polling continues regardless — one portal being down never stops the others.
 
+## Profiles: several searches, one set of requests
+
+Fetching is the rate-limited part, so it happens once and each **profile** filters the same
+results. Adding a search costs almost nothing in requests.
+
+```yaml
+criteria: {...}        # defaults every profile inherits
+scoring: {...}
+discord: {...}
+
+profiles:
+  - name: solo         # inherits everything above
+  - name: shared-3
+    criteria:
+      property_types: [apartment, house]
+      price_eur: {max: 850}
+      bedrooms: {min: 3}
+```
+
+A profile overrides the defaults field by field, so a second search does not repeat the
+keyword lists or the districts. **Lists replace rather than merge** — a profile naming its
+own `excluded` districts means those, not those plus the inherited ones. Alerts carry the
+profile name, so two searches can share one Discord channel.
+
+### Bedrooms are not rooms
+
+In Serbian listings "soba" counts the living room, so a **trosoban (3 rooms) has two
+bedrooms** and a **četvorosoban (4) has three**. Verified against nekretnine.rs, the one
+portal that publishes both numbers — across its listings, rooms minus bedrooms was
+consistently 1.
+
+This is why `criteria.bedrooms` exists and is what you should filter on. Writing
+`rooms: {min: 3}` when you mean three bedrooms silently returns flats one bedroom short.
+`bedrooms` is taken from the portal where stated and derived from the room count otherwise.
+
 ## Filtering by commute, not by district
 
 "Novi Beograd, or anywhere within a 20-minute bus ride" is a travel-time radius, not a
@@ -145,7 +180,14 @@ criteria:
 The per-area minutes live in [src/stanradar/commute.py](src/stanradar/commute.py) and are
 **hand-estimated, not measured routes** — easily ±5 minutes out. They are organised in two
 tiers: specific neighbourhoods, and municipality averages used only when no neighbourhood
-matches. Correct any of them in `config.yaml` rather than editing the file.
+matches. A name must appear in exactly one tier, since within a tier the longest pattern
+wins and a municipality would beat its own shorter neighbourhood names. Correct any of them
+in `config.yaml` rather than editing the file.
+
+Two anchors ship: `panorama` (Blok 26, Bulevar Mihajla Pupina) and `navigator` (Blok 43).
+They are at opposite ends of Novi Beograd, so switching between them genuinely reshuffles
+the map rather than nudging it — Zemun is ~7 minutes closer to Blok 26, Banovo brdo
+~10 further.
 
 `unknown: include` is deliberate. Portals invent neighbourhood names constantly, and on a
 tight budget you would much rather check a map than miss a flat. Add a new anchor by adding
@@ -169,7 +211,7 @@ Costs: the portals are free. The AI scoring is the only running cost, and it is 
 ## Development
 
 ```bash
-pytest          # 76 tests, no network
+pytest          # 90 tests, no network
 ruff check src tests
 ```
 

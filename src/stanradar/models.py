@@ -20,6 +20,11 @@ class Listing:
     price_eur: int | None = None
     area_m2: float | None = None
     rooms: float | None = None
+    # Bedrooms as the portal states them. Only nekretnine.rs publishes this directly;
+    # everywhere else it is inferred from the room count - see `bedroom_count()`.
+    bedrooms: float | None = None
+    # "apartment" or "house".
+    property_type: str = "apartment"
     floor: int | None = None
     total_floors: int | None = None
     # Belgrade geography, coarse to fine: "Beograd" / "Vracar" / "Neimar"
@@ -86,6 +91,21 @@ class Listing:
             return None
         bits = [str(self.price_eur), str(int(self.area_m2)), str(self.rooms)]
         return hashlib.sha1("|".join(bits).encode()).hexdigest()[:16]
+
+    def bedroom_count(self) -> float | None:
+        """Bedrooms, stated if the portal says so, otherwise derived from the room count.
+
+        Serbian listings count the living room: a "trosoban" has 3 rooms and 2 bedrooms,
+        a "cetvorosoban" has 4 and 3. Verified against nekretnine.rs, which publishes both
+        numbers - across its listings rooms minus bedrooms was consistently 1.
+
+        A studio (0.5-1.0 rooms) has no separate bedroom, so it floors at 0.
+        """
+        if self.bedrooms is not None:
+            return self.bedrooms
+        if self.rooms is None:
+            return None
+        return max(0.0, self.rooms - 1)
 
     def age_minutes(self) -> float | None:
         if not self.posted_at:

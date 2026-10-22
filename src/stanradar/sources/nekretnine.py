@@ -41,6 +41,16 @@ class Nekretnine(Source):
     label = "nekretnine.rs"
     needs_browser_tls = True
 
+    def __init__(self, client, property_types: list[str] | None = None):
+        super().__init__(client)
+        # Apartments only. Every guessable house-rental URL 404s, and the one path that
+        # resolves (/stambeni-objekti/kuce/grad/beograd/izdavanje/) silently serves houses
+        # *for sale* - the same trap as the apartment URL. Asking for houses here would
+        # quietly return sale listings, so this source simply does not serve them; 4zida,
+        # oglasi.rs and kupujemprodajem cover houses instead.
+        self.property_types = ["apartment"]
+        del property_types
+
     async def fetch_new(self, limit: int = 40) -> list[Listing]:
         response = await self.http.get(LIST_URL, params=SORT)
         response.raise_for_status()

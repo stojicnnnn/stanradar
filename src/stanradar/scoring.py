@@ -86,6 +86,14 @@ def evaluate(listing: Listing, criteria: Criteria, full_detail: bool = True) -> 
         return RuleResult(False, rejected_for=f"area {listing.area_m2}")
     if not criteria.rooms.contains(listing.rooms):
         return RuleResult(False, rejected_for=f"rooms {listing.rooms}")
+
+    if listing.property_type not in criteria.property_types:
+        return RuleResult(False, rejected_for=f"is a {listing.property_type}")
+
+    bedrooms = listing.bedroom_count()
+    if not criteria.bedrooms.contains(bedrooms):
+        said = f"{bedrooms:g} bedrooms" if bedrooms is not None else "bedrooms unknown"
+        return RuleResult(False, rejected_for=said)
     if listing.floor is not None and not criteria.floor.contains(float(listing.floor)):
         return RuleResult(False, rejected_for=f"floor {listing.floor}")
 

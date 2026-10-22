@@ -34,7 +34,11 @@ from .base import Source
 log = logging.getLogger(__name__)
 
 BASE = "https://www.oglasi.rs"
-LIST_URL = f"{BASE}/nekretnine/izdavanje-stanova/beograd"
+LIST_URLS = {
+    "apartment": f"{BASE}/nekretnine/izdavanje-stanova/beograd",
+    "house": f"{BASE}/nekretnine/izdavanje-kuca/beograd",
+}
+LIST_URL = LIST_URLS["apartment"]
 _ID = re.compile(r"/oglas/([\w-]+)/")
 
 
@@ -46,25 +50,35 @@ class Oglasi(Source):
     name = "oglasi"
     label = "oglasi.rs"
 
-    async def fetch_new(self, limit: int = 40) -> list[Listing]:
-        response = await self.http.get(LIST_URL)
-        response.raise_for_status()
-        tree = HTMLParser(response.text)
+    def __init__(self, client, property_types: list[str] | None = None):
+        super().__init__(client)
+        self.property_types = property_types or ["apartment"]
 
-        listings = []
-        for article in tree.css("article[itemprop='itemListElement']"):
-            try:
-                listing = self._to_listing(article)
-            except Exception as exc:
-                log.debug("oglasi: skipped an item (%s)", exc)
+    async def fetch_new(self, limit: int = 40) -> list[Listing]:
+        listings: list[Listing] = []
+        for property_type in self.property_types:
+            url = LIST_URLS.get(property_type)
+            if not url:
                 continue
-            if listing:
-                listings.append(listing)
-            if len(listings) >= limit:
-                break
+            response = await self.http.get(url)
+            response.raise_for_status()
+            tree = HTMLParser(response.text)
+
+            found = 0
+            for article in tree.css("article[itemprop='itemListElement']"):
+                try:
+                    listing = self._to_listing(article, property_type)
+                except Exception as exc:
+                    log.debug("oglasi: skipped an item (%s)", exc)
+                    continue
+                if listing:
+                    listings.append(listing)
+                    found += 1
+                if found >= limit:
+                    break
         return listings
 
-    def _to_listing(self, article: Node) -> Listing | None:
+    def _to_listing(self, article: Node, property_type: str = "apartment") -> Listing | None:
         link = article.css_first("a.fpogl-list-title")
         href = (link.attributes.get("href") if link else "") or ""
         match = _ID.search(href)
@@ -98,6 +112,7 @@ class Oglasi(Source):
             price_eur=parse_price_eur(_text(article.css_first("span.text-price"))),
             area_m2=first_number(details.get("kvadratura")),
             rooms=parse_rooms(details.get("sobnost")),
+            property_type=property_type,
             city=geo[0] if geo else None,
             municipality=geo[1] if len(geo) > 1 else None,
             district=geo[-1] if len(geo) > 2 else None,

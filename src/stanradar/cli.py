@@ -14,7 +14,7 @@ from . import __version__
 from .config import Config
 from .llm import Grader, MissingCredentials
 from .notify import Discord
-from .runner import Runner
+from .runner import ProfileRuntime, Runner
 from .scoring import evaluate
 from .sources import REGISTRY, ClientPool, build
 from .store import Store
@@ -22,10 +22,18 @@ from .store import Store
 log = logging.getLogger("stanradar")
 
 
-def _preferences(cfg: Config) -> str:
+def _preferences(criteria) -> str:
     """A plain-language summary of the criteria, for the LLM prompt."""
-    c = cfg.criteria
+    c = criteria
     lines = []
+    if c.property_types != ["apartment"]:
+        lines.append("Considering: " + " and ".join(c.property_types) + "s")
+    if c.bedrooms.min is not None:
+        lines.append(
+            f"At least {c.bedrooms.min:g} separate bedrooms "
+            f"(so at least a {c.bedrooms.min + 1:g}-room / "
+            f"{'cetvorosoban' if c.bedrooms.min >= 3 else 'trosoban'}-style place)"
+        )
     if c.price_eur.min is not None or c.price_eur.max is not None:
         lines.append(f"Budget: {c.price_eur.min or 0}-{c.price_eur.max or 'any'} EUR per month")
     if c.area_m2.min is not None:
@@ -62,25 +70,49 @@ async def _watch(args: argparse.Namespace, cfg: Config) -> int:
         await pool.aclose()
         return 2
 
-    discord = Discord(cfg.discord, pool.plain)
-    if not discord.configured and not args.dry_run:
+    if not any(p.discord.webhook_url for p in cfg.profiles) and not args.dry_run:
         log.error(
             "no Discord webhook. Set DISCORD_WEBHOOK_URL in .env, or pass --dry-run to "
             "print matches to the console instead."
         )
+        await pool.aclose()
+        store.close()
         return 2
 
-    grader = None
-    if cfg.scoring.llm.enabled:
+    # One grader per distinct model, shared by every profile that asks for it.
+    graders: dict[str, Grader] = {}
+    for model in {p.scoring.llm.model for p in cfg.profiles if p.scoring.llm.enabled}:
         try:
-            grader = Grader(cfg.scoring.llm)
+            graders[model] = Grader(
+                next(p.scoring.llm for p in cfg.profiles if p.scoring.llm.model == model)
+            )
         except MissingCredentials as exc:
             log.warning("AI scoring off: %s", exc)
             log.warning("Continuing with rule scores only - alerts still work.")
         except Exception as exc:
             log.warning("AI scoring off (%r); continuing with rule scores only", exc)
 
-    runner = Runner(cfg, sources, store, discord, grader, _preferences(cfg), args.dry_run)
+    runtimes = []
+    for profile in cfg.profiles:
+        grader = graders.get(profile.scoring.llm.model) if profile.scoring.llm.enabled else None
+        # Each profile may point at a different channel, so give it its own notifier.
+        profile_discord = Discord(profile.discord, pool.plain)
+        if not profile_discord.configured and not args.dry_run:
+            log.error("profile %r has no Discord webhook configured", profile.name)
+            await pool.aclose()
+            store.close()
+            return 2
+        runtimes.append(
+            ProfileRuntime(
+                profile=profile,
+                discord=profile_discord,
+                preferences=_preferences(profile.criteria),
+                grader=grader,
+            )
+        )
+    log.info("profiles: %s", ", ".join(p.name for p in cfg.profiles))
+
+    runner = Runner(cfg, sources, store, runtimes, args.dry_run)
     try:
         if args.once:
             stats = await runner.run_cycle()
@@ -103,7 +135,7 @@ async def _watch(args: argparse.Namespace, cfg: Config) -> int:
 
 async def _test_discord(cfg: Config) -> int:
     pool = ClientPool(cfg.request_timeout_seconds)
-    discord = Discord(cfg.discord, pool.plain)
+    discord = Discord(cfg.profiles[0].discord, pool.plain)
     if not discord.configured:
         log.error("no Discord webhook configured (DISCORD_WEBHOOK_URL)")
         await pool.aclose()
@@ -133,16 +165,26 @@ async def _probe(cfg: Config) -> int:
             continue
         print(f"  {len(listings)} listings")
         for listing in listings:
-            rules = evaluate(listing, cfg.criteria, full_detail=not source.has_detail_fetch)
-            mark = f"PASS {rules.score:>3}" if rules.passed else f"skip ({rules.rejected_for})"
+            verdicts = []
+            for profile in cfg.profiles:
+                rules = evaluate(
+                    listing, profile.criteria, full_detail=not source.has_detail_fetch
+                )
+                verdicts.append(
+                    f"{profile.name}="
+                    + (f"PASS {rules.score}" if rules.passed else f"skip({rules.rejected_for})")
+                )
             age = listing.age_minutes()
             age_text = f"{age:.0f} min ago" if age is not None else "age unknown"
+            kind = "house" if listing.property_type == "house" else "flat"
+            beds = listing.bedroom_count()
             print(
-                f"  [{mark}] {listing.price_eur or '?':>5} EUR  "
-                f"{listing.area_m2 or '?':>5} m2  {listing.location_text[:40]:<40} "
-                f"{age_text}"
+                f"  {listing.price_eur or '?':>5} EUR {listing.area_m2 or '?':>5} m2 "
+                f"{(f'{beds:g}bed' if beds is not None else '?bed'):>5} {kind:<5} "
+                f"{listing.location_text[:34]:<34} {age_text}"
             )
-            print(f"          {listing.url}")
+            print(f"        {' | '.join(verdicts)}")
+            print(f"        {listing.url}")
     await pool.aclose()
     return 0
 

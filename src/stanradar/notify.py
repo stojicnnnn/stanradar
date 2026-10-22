@@ -69,14 +69,18 @@ class Discord:
         rules: RuleResult,
         verdict: Verdict | None,
         duplicate_of: str | None = None,
+        profile: str | None = None,
     ) -> None:
         score = verdict.fit if verdict else rules.score
 
         price = f"{listing.price_eur} EUR" if listing.price_eur else "price n/a"
         size = f"{listing.area_m2:g} m2" if listing.area_m2 else "size n/a"
         title = f"{price} - {size}"
-        if listing.rooms:
-            title += f" - {listing.rooms:g} rooms"
+        bedrooms = listing.bedroom_count()
+        if bedrooms:
+            title += f" - {bedrooms:g} bed"
+        if listing.property_type == "house":
+            title += " (house)"
 
         fields = [
             _field("Location", listing.location_text or "unknown"),
@@ -91,6 +95,12 @@ class Discord:
             ),
             _field("Advertiser", listing.advertiser or _who(listing)),
             _field("Furnished", _furnishing(listing)),
+            _field(
+                "Rooms",
+                f"{listing.rooms:g} rooms / {bedrooms:g} bed"
+                if listing.rooms and bedrooms is not None
+                else "-",
+            ),
             _field("Score", f"rules {rules.score}" + (f" | AI {verdict.fit}" if verdict else "")),
             _field("Source", listing.source),
         ]
@@ -120,8 +130,12 @@ class Discord:
             "description": "\n".join(lines)[:2000],
             "color": _color(score),
             "fields": fields,
+            # Which search matched, so two profiles in one channel stay tellable apart.
+            "author": {"name": f"[{profile}]"} if profile else None,
             "footer": {"text": listing.title[:100] or listing.source},
         }
+        if embed.get("author") is None:
+            embed.pop("author", None)
         if listing.images:
             embed["thumbnail"] = {"url": listing.images[0]}
         if listing.posted_at:

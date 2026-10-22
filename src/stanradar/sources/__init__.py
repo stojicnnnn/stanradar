@@ -32,20 +32,24 @@ def build(names: list[str], pool: ClientPool, cfg: Config) -> list[Source]:
             raise ValueError(f"source {name!r} has no adapter yet: {cls.reason}")
 
         client = pool.for_source(cls)
+        # Fetch the union of what every profile asks for, then let each profile filter.
+        types = sorted(cfg.property_types)
         if cls is FourZida:
             # 4zida is the only source that can pre-filter server-side, which keeps its
-            # response small. Everything precise still happens locally.
+            # response small. The ceiling is the most generous profile's, so a cheap
+            # profile never hides listings a more expensive one wants.
+            caps = [p.criteria.price_eur.max for p in cfg.profiles if p.criteria.price_eur.max]
+            floors = [p.criteria.area_m2.min for p in cfg.profiles if p.criteria.area_m2.min]
             sources.append(
                 FourZida(
                     client,
-                    price_to=int(cfg.criteria.price_eur.max)
-                    if cfg.criteria.price_eur.max
-                    else None,
-                    m2_from=int(cfg.criteria.area_m2.min) if cfg.criteria.area_m2.min else None,
+                    price_to=int(max(caps)) if caps else None,
+                    m2_from=int(min(floors)) if floors else None,
+                    property_types=types,
                 )
             )
         else:
-            sources.append(cls(client))
+            sources.append(cls(client, property_types=types))
     return sources
 
 

@@ -36,7 +36,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from ..models import Listing
-from ..text import detect_furnished, first_number, parse_floor, parse_rooms
+from ..text import detect_furnished, first_number, fold, parse_floor, parse_rooms
 from .base import Source
 
 log = logging.getLogger(__name__)
@@ -44,14 +44,21 @@ log = logging.getLogger(__name__)
 BASE = "https://www.kupujemprodajem.com"
 SEARCH_URL = f"{BASE}/pretraga"
 IMAGE_BASE = "https://images.kupujemprodajem.com"
-DEFAULT_QUERY = "izdavanje stana beograd"
+# One keyword search per property type; KP has no usable category listing.
+DEFAULT_QUERIES = {
+    "apartment": "izdavanje stana beograd",
+    "house": "izdavanje kuce beograd",
+}
+DEFAULT_QUERY = DEFAULT_QUERIES["apartment"]
+# The group KP files each type under, used to drop the commercial premises and rooms
+# that the same keyword search also returns.
+GROUPS = {"apartment": "stanovi", "house": "kuce"}
 BELGRADE = ZoneInfo("Europe/Belgrade")
 
 _NEXT_DATA = re.compile(
     r'<script id="__NEXT_DATA__" type="application/json"[^>]*>(.*?)</script>', re.S
 )
-# Only apartment rentals; KP's search also returns rooms, garages and sale listings.
-_RENT_GROUP = "stanovi"
+
 
 
 class KupujemProdajem(Source):
@@ -61,35 +68,38 @@ class KupujemProdajem(Source):
     # and full text only exist on the ad page.
     has_detail_fetch = True
 
-    def __init__(self, client, query: str = DEFAULT_QUERY):
+    def __init__(self, client, property_types: list[str] | None = None):
         super().__init__(client)
-        self.query = query
+        self.property_types = property_types or ["apartment"]
 
     async def fetch_new(self, limit: int = 40) -> list[Listing]:
-        response = await self.http.get(SEARCH_URL, params={"keywords": self.query})
-        response.raise_for_status()
-
-        match = _NEXT_DATA.search(response.text)
-        if not match:
-            raise RuntimeError("kupujemprodajem: __NEXT_DATA__ not found in response")
-        state = json.loads(match.group(1)).get("props", {}).get("initialReduxState", {})
-        result = (state.get("search") or {}).get("lastSearchResult") or {}
-        ads = result.get("ads") or []
-
-        listings = []
-        for ad in ads[:limit]:
-            try:
-                listing = self._to_listing(ad)
-            except Exception as exc:
-                log.debug("kupujemprodajem: skipped an item (%s)", exc)
+        listings: list[Listing] = []
+        for property_type in self.property_types:
+            query = DEFAULT_QUERIES.get(property_type)
+            if not query:
                 continue
-            if listing:
-                listings.append(listing)
+            response = await self.http.get(SEARCH_URL, params={"keywords": query})
+            response.raise_for_status()
+
+            match = _NEXT_DATA.search(response.text)
+            if not match:
+                raise RuntimeError("kupujemprodajem: __NEXT_DATA__ not found in response")
+            state = json.loads(match.group(1)).get("props", {}).get("initialReduxState", {})
+            result = (state.get("search") or {}).get("lastSearchResult") or {}
+
+            for ad in (result.get("ads") or [])[:limit]:
+                try:
+                    listing = self._to_listing(ad, property_type)
+                except Exception as exc:
+                    log.debug("kupujemprodajem: skipped an item (%s)", exc)
+                    continue
+                if listing:
+                    listings.append(listing)
         return listings
 
-    def _to_listing(self, ad: dict) -> Listing | None:
-        # The keyword search is broad; keep only apartment rentals.
-        if _RENT_GROUP not in (ad.get("group_name") or "").lower():
+    def _to_listing(self, ad: dict, property_type: str = "apartment") -> Listing | None:
+        # The keyword search is broad; keep only the group matching the type asked for.
+        if GROUPS[property_type] not in fold(ad.get("group_name")):
             return None
         if "izdavanje" not in (ad.get("category_name") or "").lower():
             return None
@@ -116,6 +126,7 @@ class KupujemProdajem(Source):
             price_eur=int(ad["price"]) if ad.get("price") else None,
             area_m2=first_number(attrs.get("realEstateArea")),
             rooms=parse_rooms(attrs.get("realEstateApartmentNumberOfRooms")),
+            property_type=property_type,
             floor=floor,
             total_floors=total_floors,
             city=parts[0] if parts else None,

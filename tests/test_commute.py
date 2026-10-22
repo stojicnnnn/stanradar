@@ -145,3 +145,37 @@ def test_an_unknown_area_can_be_excluded_on_request():
 def test_no_max_minutes_disables_the_filter_entirely():
     far = listing(municipality="Mirijevo", district="Mirijevo")
     assert evaluate(far, criteria(max_minutes=None)).passed
+
+
+def test_the_two_tiers_never_overlap():
+    """A name in both tiers silently breaks the lookup.
+
+    Within a tier the longest pattern wins, so a municipality sitting in AREAS beats its
+    own shorter neighbourhood names: "palilula" (8 chars) outranked "borca" (5), and every
+    Borca listing scored as an inner-Palilula commute - about 15 minutes too optimistic.
+    """
+    from stanradar import commute
+
+    for anchor in commute.ANCHORS:
+        _, areas, fallbacks = commute.ANCHORS[anchor]
+        overlap = sorted(set(areas) & set(fallbacks))
+        assert not overlap, f"{anchor}: {overlap} appear in both tiers"
+
+
+def test_far_danube_suburbs_are_not_treated_as_inner_city():
+    for anchor in ("navigator", "panorama"):
+        table = resolve_anchor(anchor)
+        minutes, area = table.estimate("Borča, Palilula opština, Beograd")
+        assert area == "borca", f"{anchor} matched {area}"
+        assert minutes >= 40, f"{anchor} gave Borca {minutes} min"
+
+
+def test_the_two_anchors_disagree_in_the_right_direction():
+    """Blok 43 is on the Sava in the south, Blok 26 on the Danube in the north."""
+    south, north = resolve_anchor("navigator"), resolve_anchor("panorama")
+    # Zemun and the northern blocks are closer to the new office...
+    assert north.estimate("Gornji Grad, Zemun")[0] < south.estimate("Gornji Grad, Zemun")[0]
+    assert north.estimate("Blok 26, Novi Beograd")[0] < south.estimate("Blok 26, Novi Beograd")[0]
+    # ...and Cukarica and the southern blocks are further.
+    assert north.estimate("Banovo brdo, Cukarica")[0] > south.estimate("Banovo brdo, Cukarica")[0]
+    assert north.estimate("Blok 43, Novi Beograd")[0] > south.estimate("Blok 43, Novi Beograd")[0]

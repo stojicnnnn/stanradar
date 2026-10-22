@@ -83,12 +83,17 @@ criteria:
   # measured routes. Correct any of them here as you learn the city; `areas` is merged
   # over the defaults.
   commute:
-    anchor: navigator            # Blok 43, Bul. Milutina Milankovica, Novi Beograd
-    # 25, not 20, on purpose. The estimates are hand-made and easily +/-5 minutes out, and
-    # the cheapest areas you can actually reach cluster just past 20: Bezanijska kosa and
-    # Zarkovo at ~22, Ledine and Zemunske kapije at ~24. A hard 20 would cut out most of
-    # what is affordable while only trimming a few minutes off the ride. Drop it to 20
-    # once you have checked a few of these rides yourself and know the real numbers.
+    anchor: panorama             # Panorama 26, Blok 26, Bul. Mihajla Pupina
+    # Anchored on the NEW office in Blok 26, not the old one in Blok 43. They are at
+    # opposite ends of Novi Beograd - Blok 43 is on the Sava in the south, Blok 26 on the
+    # Danube in the north - so this genuinely reshuffles the map: Zemun and the northern
+    # blocks get much closer, and Cukarica (Banovo brdo, Zarkovo, Cerak) goes from "best
+    # value nearby" to the far side of town. Set `anchor: navigator` to search against the
+    # old office instead.
+    #
+    # 25 rather than 20 because the estimates are hand-made and easily +/-5 out, and the
+    # affordable areas cluster just past 20 - Bezanijska kosa and Zemun around 20, Ledine
+    # and Zemunske kapije around 25.
     max_minutes: 25
     areas: {}                    # corrections, e.g. {zarkovo: 18, ledine: 22}
     unknown: include             # include | exclude - see the note below
@@ -103,19 +108,20 @@ criteria:
     # within it, so keep them short. Matched as folded substrings, so "zarkovo" also
     # matches "Žarkovo".
     preferred:
-      - blok 43
-      - blok 44
-      - blok 45
-      - belville
-      - banovo brdo
-      - blok 70
-      - dr ivana ribara
+      - blok 21
+      - blok 22
+      - blok 23
+      - blok 24
+      - blok 25
+      - blok 26
+      - usce
+      - sava kovacevic
     acceptable:
       - novi beograd
       - zemun
-      - cukarica
-      - zarkovo
       - bezanijska kosa
+      - gornji grad
+      - novi zemun
     excluded:
       - borca
       - ovca
@@ -212,3 +218,88 @@ discord:
   # Lowered to match alert_threshold: at this budget a matching flat is rare enough that
   # you want the phone to buzz for it.
   mention_min_score: 65
+
+# ---------------------------------------------------------------------------
+# PROFILES
+#
+# Everything above is the DEFAULT every profile inherits. Each profile below
+# overrides it field by field, so a second search does not repeat the keyword
+# lists, the blocked terms or the commute table.
+#
+# All profiles run against the same fetched listings. Fetching is the slow,
+# rate-limited part, so adding a profile costs almost nothing - it does not
+# double the requests to the portals.
+#
+# Lists REPLACE rather than merge: a profile that names its own `excluded`
+# districts means those, not those plus the inherited ones.
+# ---------------------------------------------------------------------------
+profiles:
+  # The original search: one person, tight budget.
+  - name: solo
+
+  # Three people sharing, so three genuinely separate bedrooms.
+  - name: shared-3
+    criteria:
+      # Houses are worth including here in a way they are not for one person: a
+      # whole house at this budget is realistic, and 4zida alone lists ~450 in
+      # Belgrade. Houses come from a different endpoint on every portal, so this
+      # changes what gets fetched, not just what is kept.
+      property_types: [apartment, house]
+
+      price_eur:
+        min: 350          # a real 3-bedroom below this is a scam or a ruin
+        max: 850
+
+      # THE IMPORTANT ONE. Serbian listings count the living room in "soba", so a
+      # trosoban (3 rooms) has only TWO bedrooms and a cetvorosoban (4) has three.
+      # Verified against nekretnine.rs, the one portal publishing both numbers.
+      # Asking for `rooms: 3` here would quietly return two-bedroom flats - which
+      # is exactly the mistake this profile exists to avoid.
+      bedrooms:
+        min: 3
+      rooms:
+        min: null         # left open; `bedrooms` is the real constraint
+
+      area_m2:
+        min: 65           # three bedrooms plus a living room in under 65 m2 is a squeeze
+        max: 300          # houses run large
+      max_price_per_m2: 15
+
+      # Wider than the solo search, deliberately. There are only ~24 apartments and
+      # ~8 houses in all of Belgrade at 4+ rooms under 850 EUR, and the houses sit
+      # in outer suburbs. A 25-minute radius would leave almost nothing; at 35 the
+      # three of you still have a sane commute and there is something to look at.
+      commute:
+        anchor: panorama
+        max_minutes: 35
+
+      # Scored against the new office too, but a share can reasonably sit further out.
+      districts:
+        preferred: [blok 21, blok 22, blok 23, blok 24, blok 25, blok 26, usce, zemun]
+        acceptable: [novi beograd, bezanijska kosa, gornji grad, banovo brdo, cukarica, vracar, stari grad]
+        # Lists replace rather than merge, so the far suburbs from the defaults have to
+        # be repeated here - otherwise this profile would happily accept Borca.
+        excluded: [borca, ovca, krnjaca, padinska skela, surcin, obrenovac,
+                   lazarevac, barajevo, mladenovac, grocka, sopot]
+
+    scoring:
+      # The pool is tiny, so see nearly everything that clears the hard filters.
+      alert_threshold: 45
+      llm:
+        min_rule_score: 35
+        notes: |
+          This is a flat or house for THREE people sharing, so the thing that matters most
+          is three genuinely separate, private bedrooms - three real rooms with doors and
+          windows, not a living room counted as a bedroom and not a pass-through room you
+          have to walk through to reach another. Serbian listings routinely advertise a
+          trosoban (3-room) flat as suitable for three people when it only has two
+          bedrooms; say clearly how many real bedrooms the photos and floor plan actually
+          show, and flag it loudly if the count looks short.
+
+          Three people also means the shared space has to work: a kitchen and living area
+          big enough to not be miserable, and ideally more than one bathroom or at least a
+          separate toilet. Note the bathroom count.
+
+          We commute by public transport to Blok 26 on Bulevar Mihajla Pupina in Novi
+          Beograd. If this is a house, say whether it looks like a normal residential
+          street with transport nearby or somewhere you would need a car.

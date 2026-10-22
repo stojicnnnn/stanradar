@@ -7,7 +7,8 @@ typically lands in Discord within a minute of the listing going live.
 
 Verified endpoints (2026-10):
   GET /v6/search/apartments?for=rent&placeIds[]=2&sort=createdAtDesc&page=1
-  GET /v6/ads/{id}          -> full description + all photos
+  GET /v6/search/houses?...  -> same response shape, ~450 Belgrade rentals
+  GET /v6/ads/{id}           -> full description + all photos
 
 Only `for`, `placeIds[]`, `priceFrom`, `priceTo`, `m2From`, `m2To`, `page` and `sort` are
 known-good query params; anything else returns 422. We therefore filter broadly server-side
@@ -63,31 +64,47 @@ class FourZida(Source):
     # photo set and full text only arrive from /v6/ads/{id}.
     has_detail_fetch = True
 
-    def __init__(self, client, price_to: int | None = None, m2_from: int | None = None):
+    # 4zida keeps houses behind a separate endpoint with an identical response shape.
+    ENDPOINTS = {"apartment": "apartments", "house": "houses"}
+
+    def __init__(
+        self,
+        client,
+        price_to: int | None = None,
+        m2_from: int | None = None,
+        property_types: list[str] | None = None,
+    ):
         super().__init__(client)
         # Broad server-side pre-filter only; everything precise happens locally.
         self.price_to = price_to
         self.m2_from = m2_from
+        self.property_types = property_types or ["apartment"]
 
     async def fetch_new(self, limit: int = 40) -> list[Listing]:
-        params: list[tuple[str, Any]] = [
-            ("for", "rent"),
-            ("placeIds[]", BELGRADE_PLACE_ID),
-            ("sort", "createdAtDesc"),
-            ("page", 1),
-        ]
-        if self.price_to:
-            # Headroom, so a listing priced slightly over still gets scored and logged.
-            params.append(("priceTo", int(self.price_to * 1.2)))
-        if self.m2_from:
-            params.append(("m2From", max(1, int(self.m2_from * 0.8))))
+        listings: list[Listing] = []
+        for property_type in self.property_types:
+            endpoint = self.ENDPOINTS.get(property_type)
+            if not endpoint:
+                continue
+            params: list[tuple[str, Any]] = [
+                ("for", "rent"),
+                ("placeIds[]", BELGRADE_PLACE_ID),
+                ("sort", "createdAtDesc"),
+                ("page", 1),
+            ]
+            if self.price_to:
+                # Headroom, so a listing priced slightly over still gets scored and logged.
+                params.append(("priceTo", int(self.price_to * 1.2)))
+            if self.m2_from:
+                params.append(("m2From", max(1, int(self.m2_from * 0.8))))
 
-        response = await self.http.get(f"{API}/search/apartments", params=params)
-        response.raise_for_status()
-        ads = response.json().get("ads", [])
-        return [self._to_listing(ad) for ad in ads[:limit]]
+            response = await self.http.get(f"{API}/search/{endpoint}", params=params)
+            response.raise_for_status()
+            ads = response.json().get("ads", [])
+            listings.extend(self._to_listing(ad, property_type) for ad in ads[:limit])
+        return listings
 
-    def _to_listing(self, ad: dict[str, Any]) -> Listing:
+    def _to_listing(self, ad: dict[str, Any], property_type: str = "apartment") -> Listing:
         places = ad.get("placeNames") or []
         thumb = _best_image(ad.get("image"))
         return Listing(
@@ -99,6 +116,7 @@ class FourZida(Source):
             price_eur=int(ad["price"]) if ad.get("price") else None,
             area_m2=float(ad["m2"]) if ad.get("m2") else None,
             rooms=float(ad["roomCount"]) if ad.get("roomCount") else None,
+            property_type=property_type,
             floor=ad.get("redactedFloor"),
             total_floors=ad.get("redactedTotalFloors"),
             # placeNames is fine-to-coarse: ["Zemunske kapije", "Zemun opstina", "Beograd"]

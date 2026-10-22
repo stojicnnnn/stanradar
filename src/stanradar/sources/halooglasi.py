@@ -34,7 +34,11 @@ from .base import Source
 log = logging.getLogger(__name__)
 
 BASE = "https://www.halooglasi.com"
-LIST_URL = f"{BASE}/nekretnine/izdavanje-stanova/beograd"
+LIST_URLS = {
+    "apartment": f"{BASE}/nekretnine/izdavanje-stanova/beograd",
+    "house": f"{BASE}/nekretnine/izdavanje-kuca/beograd",
+}
+LIST_URL = LIST_URLS["apartment"]
 # QuidditaEnvironment.SortingFields -> "Prvo najnoviji" (ValidFromForDisplay, descending)
 SORT_NEWEST = "b0545d50-79fb-4ba5-a2d5-d1f08a6dbdb3"
 
@@ -48,25 +52,35 @@ class HaloOglasi(Source):
     label = "halooglasi.com"
     needs_browser_tls = True
 
-    async def fetch_new(self, limit: int = 40) -> list[Listing]:
-        response = await self.http.get(LIST_URL, params={"sort": SORT_NEWEST})
-        response.raise_for_status()
-        tree = HTMLParser(response.text)
+    def __init__(self, client, property_types: list[str] | None = None):
+        super().__init__(client)
+        self.property_types = property_types or ["apartment"]
 
-        listings = []
-        for item in tree.css("div.product-item[data-id]"):
-            # Promoted banner slots reuse the product-item class but carry no real ad.
-            if "banner-list" in (item.attributes.get("class") or ""):
+    async def fetch_new(self, limit: int = 40) -> list[Listing]:
+        listings: list[Listing] = []
+        for property_type in self.property_types:
+            url = LIST_URLS.get(property_type)
+            if not url:
                 continue
-            try:
-                listings.append(self._to_listing(item))
-            except Exception as exc:  # one malformed card must not kill the cycle
-                log.debug("halooglasi: skipped an item (%s)", exc)
-            if len(listings) >= limit:
-                break
+            response = await self.http.get(url, params={"sort": SORT_NEWEST})
+            response.raise_for_status()
+            tree = HTMLParser(response.text)
+
+            found = 0
+            for item in tree.css("div.product-item[data-id]"):
+                # Promoted banner slots reuse the class but carry no real ad.
+                if "banner-list" in (item.attributes.get("class") or ""):
+                    continue
+                try:
+                    listings.append(self._to_listing(item, property_type))
+                    found += 1
+                except Exception as exc:  # one malformed card must not kill the cycle
+                    log.debug("halooglasi: skipped an item (%s)", exc)
+                if found >= limit:
+                    break
         return listings
 
-    def _to_listing(self, item: Node) -> Listing:
+    def _to_listing(self, item: Node, property_type: str = "apartment") -> Listing:
         ad_id = item.attributes["data-id"]
         link = item.css_first("h3.product-title a")
         href = (link.attributes.get("href") if link else "") or ""
@@ -113,6 +127,7 @@ class HaloOglasi(Source):
             price_eur=price,
             area_m2=area,
             rooms=rooms,
+            property_type=property_type,
             floor=floor,
             total_floors=total_floors,
             city=places[0] if places else None,
