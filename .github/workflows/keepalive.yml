@@ -1,0 +1,30 @@
+name: keepalive
+
+# GitHub disables scheduled workflows in a public repository after 60 days with no
+# repository activity, and workflow runs do not count as activity - only commits do.
+# Without this, the watcher would go quiet after two months and nothing would say so.
+#
+# This commits a timestamp once a week, which is enough to keep the clock reset.
+on:
+  schedule:
+    - cron: "17 4 * * 1" # Mondays, 04:17 UTC - off the hour, where the runner queue is shorter
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  touch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record a heartbeat
+        run: |
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/last-keepalive
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/last-keepalive
+          # Nothing to commit is not a failure; it just means the date is unchanged.
+          git diff --staged --quiet || git commit -m "chore: keepalive"
+          git push

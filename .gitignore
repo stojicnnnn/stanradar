@@ -14,8 +14,9 @@ venv/
 *.egg-info/
 dist/
 build/
-# local config (keep config.example.yaml tracked)
-config.yaml
+# config.yaml IS tracked. The GitHub Actions workflow needs it, and it holds no secrets -
+# the webhook and API key come from ${ENV_VAR}. If you go back to a private VPS and would
+# rather keep your criteria out of the repo, re-add it here.
 # os
 Thumbs.db
 .DS_Store

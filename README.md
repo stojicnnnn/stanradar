@@ -106,10 +106,18 @@ a process works. The only real requirement is that it **stays running** — a la
 sleeps will be asleep at 2am, which is exactly when you will miss listings. A €4–5/month VPS
 or a Raspberry Pi is worth more here than any amount of tuning.
 
-**[docs/DEPLOY.md](docs/DEPLOY.md)** has the full VPS setup: hardening, install, the
-systemd unit in [deploy/stanradar.service](deploy/stanradar.service), and the two traps
-that bite (user services need `loginctl enable-linger`, and `ReadWritePaths` directories
-must already exist).
+Two ways to do it:
+
+- **A VPS (~€5/month)** — polls every 60 seconds, which is the version this was designed
+  for. **[docs/DEPLOY.md](docs/DEPLOY.md)** has the full setup: hardening, install, the
+  systemd unit in [deploy/stanradar.service](deploy/stanradar.service), and the two traps
+  that bite (user services need `loginctl enable-linger`, and `ReadWritePaths` directories
+  must already exist).
+- **GitHub Actions (free, no card)** — a scheduled workflow instead of a server. Realistically
+  polls every 5–20 minutes rather than 60 seconds, and the repo must be public to get
+  unlimited Actions minutes. **[docs/GITHUB-ACTIONS.md](docs/GITHUB-ACTIONS.md)** covers
+  the setup, what becomes public, and the one real unknown: whether the portals block
+  GitHub's Azure IP ranges.
 
 On Windows, Task Scheduler with "run whether user is logged on or not" and a trigger at
 startup, pointing at `.venv\Scripts\stanradar.exe watch`. Disable sleep, or it will not

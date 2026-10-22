@@ -1,0 +1,67 @@
+name: watch
+
+# Free hosting on GitHub's runners instead of a VPS. Read docs/GITHUB-ACTIONS.md before
+# relying on this - the trade is real: a VPS polls every 60 seconds, this realistically
+# lands somewhere between 5 and 20 minutes because GitHub delays scheduled workflows
+# under load. Still well inside the "first hour or two" that decides a Belgrade listing.
+on:
+  schedule:
+    # Every 5 minutes is the floor GitHub allows. Treat it as a request, not a promise.
+    - cron: "*/5 * * * *"
+  # So you can trigger a run by hand from the Actions tab, which is how you test changes.
+  workflow_dispatch:
+
+# One run at a time. Two overlapping runs would restore the same state cache and both
+# decide the same listing is new, so you would get every alert twice.
+concurrency:
+  group: stanradar-watch
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    # A cycle takes ~20s. If it is still going after 10 minutes something is wrong and
+    # the next scheduled run should get its turn instead.
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e .
+
+      # Which listings have already been alerted on. Without this every run would treat
+      # the whole market as new and re-send everything.
+      #
+      # Cache entries are immutable, so each run writes a new key and the prefix in
+      # restore-keys picks up the most recent one. If the cache is ever lost, the app
+      # re-primes silently rather than flooding the channel - that is what the priming
+      # step in runner.py is for.
+      - name: Restore seen-listings state
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: stanradar-state-${{ github.run_id }}
+          restore-keys: |
+            stanradar-state-
+
+      - name: Poll the portals
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          # Optional. Without it the run logs a warning and uses rule scores only.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: stanradar watch --once
+
+      # `always()` so a crash mid-cycle still records what was already alerted on, rather
+      # than re-alerting it next run.
+      - name: Save seen-listings state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: stanradar-state-${{ github.run_id }}

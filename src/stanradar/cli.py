@@ -85,6 +85,12 @@ async def _watch(args: argparse.Namespace, cfg: Config) -> int:
         if args.once:
             stats = await runner.run_cycle()
             log.info("%s", stats)
+            # Exit non-zero when every source failed, so a scheduled CI run shows red
+            # instead of passing quietly. One portal being down is normal and stays
+            # green; all of them failing usually means the runner's IP is blocked.
+            if sources and stats.errors == len(sources):
+                log.error("every source failed this cycle")
+                return 1
         else:
             await runner.run_forever()
     except KeyboardInterrupt:
