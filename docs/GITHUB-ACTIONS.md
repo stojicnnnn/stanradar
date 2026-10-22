@@ -78,7 +78,23 @@ thing those WAFs do. GitHub's runners are Azure IPs, which are heavily blocked a
 web. Whether these five Serbian sites block them is genuinely unknown until you run it —
 it cannot be tested from a home connection.
 
-So the first manual run tells you which world you are in:
+**Measured on the first real run (2026-10-22):** four of five work from GitHub's runners.
+
+| Portal | From GitHub Actions |
+|---|---|
+| 4zida.rs | works |
+| nekretnine.rs | works |
+| oglasi.rs | works |
+| kupujemprodajem.com | works |
+| **halooglasi.com** | **HTTP 403 — blocked** |
+
+Interesting detail: nekretnine.rs uses the same class of TLS-fingerprinting WAF and passes,
+so halooglasi is blocking the IP range rather than the handshake. A different `impersonate`
+profile will not get around that. It is commented out of `sources` in `config.yaml` for
+this reason, with a note on how to restore it — it works fine from a home connection or a
+VPS, so moving off Actions brings it back by deleting one `# `.
+
+If you set this up fresh, the first manual run tells you which world you are in:
 
 - **Green, and alerts arrive** → it works, you are done.
 - **Green, but one portal logs `fetch failed`** → that portal blocks Azure; the other four

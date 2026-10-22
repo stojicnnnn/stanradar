@@ -12,10 +12,19 @@ database_path: data/stanradar.db
 # Run `stanradar sources` to see what is available and what is not implemented yet.
 sources:
   - fourzida
-  - halooglasi
   - nekretnine
   - oglasi
   - kupujemprodajem
+  # - halooglasi
+  #
+  # Disabled only because this runs on GitHub Actions. Measured on a real run: halooglasi
+  # returns HTTP 403 to GitHub's Azure runners, while the other four are fine - including
+  # nekretnine.rs, which uses the same class of TLS-fingerprinting WAF. That makes it IP
+  # reputation rather than fingerprinting, so a different impersonation profile will not
+  # help. Left enabled it would fail every cycle forever and keep `errors` permanently at 1.
+  #
+  # It works perfectly from a home connection or a VPS. If you move off Actions, delete the
+  # '# ' above and it comes straight back.
 
 criteria:
   # READ THIS BEFORE WIDENING THE BUDGET.
