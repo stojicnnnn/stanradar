@@ -13,15 +13,15 @@ poll portals -> drop what you'd never take -> fetch the details -> read the phot
              -> score the fit -> alert on Discord
 ```
 
-Four portals are polled every 60 seconds (see [docs/SOURCES.md](docs/SOURCES.md) for the
+Five portals are polled every 60 seconds (see [docs/SOURCES.md](docs/SOURCES.md) for the
 full list and what was found when each was probed). Each new listing goes through:
 
-1. **Hard filters** — price, size, rooms, floor, €/m², district, deal-breaker keywords.
+1. **Hard filters** — price, size, rooms, floor, €/m², commute time, deal-breaker keywords.
    Cheap and instant, so a listing that is out of budget costs nothing.
 2. **Detail fetch** — only for listings that got past step 1, so detail requests are never
    wasted on a flat you'd never take.
 3. **Rule score (0–100)** — how good a deal it is on the numbers: price within your band,
-   €/m² against your ceiling, preferred district, extra space, amenity keywords.
+   €/m² against your ceiling, commute time, preferred district, extra space, amenities.
 4. **AI fit score** — the photos and the full Serbian description go to Claude, which judges
    what rules cannot: real condition of the kitchen and bathroom, natural light, layout
    problems, and whether the listing is hiding something. Only listings that already look
@@ -131,6 +131,31 @@ startup, pointing at `.venv\Scripts\stanradar.exe watch`.
 If a portal fails five polls in a row you get one Discord warning, not one per cycle. Polling
 continues regardless — one portal being down never stops the others.
 
+## Filtering by commute, not by district
+
+"Novi Beograd, or anywhere within a 20-minute bus ride" is a travel-time radius, not a
+district list — and the difference matters, because the cheapest areas you can actually
+reach are across the Sava in Čukarica (Banovo brdo, Žarkovo) and in the west of Novi Beograd
+(Bežanijska kosa, Ledine). A district list would either miss them or sweep in half the city.
+
+```yaml
+criteria:
+  commute:
+    anchor: navigator      # Navigator Business Center, Blok 43, Novi Beograd
+    max_minutes: 25
+    areas: {zarkovo: 18}   # corrections, merged over the built-in estimates
+    unknown: include       # keep listings in areas the table does not recognise
+```
+
+The per-area minutes live in [src/stanradar/commute.py](src/stanradar/commute.py) and are
+**hand-estimated, not measured routes** — easily ±5 minutes out. They are organised in two
+tiers: specific neighbourhoods, and municipality averages used only when no neighbourhood
+matches. Correct any of them in `config.yaml` rather than editing the file.
+
+`unknown: include` is deliberate. Portals invent neighbourhood names constantly, and on a
+tight budget you would much rather check a map than miss a flat. Add a new anchor by adding
+an entry to `ANCHORS` in that file.
+
 ## Tuning
 
 Two numbers control the signal-to-noise ratio:
@@ -149,7 +174,7 @@ Costs: the portals are free. The AI scoring is the only running cost, and it is 
 ## Development
 
 ```bash
-pytest          # 47 tests, no network
+pytest          # 68 tests, no network
 ruff check src tests
 ```
 
@@ -160,6 +185,7 @@ The code is organised so that adding a portal means writing one file:
 | `sources/` | One adapter per portal. Implement `fetch_new()`, optionally `enrich()`. |
 | `models.py` | The normalized `Listing` every adapter produces. |
 | `scoring.py` | Hard filters and the rule score. |
+| `commute.py` | Travel-time estimates per area, and the anchor table. |
 | `llm.py` | The Claude vision call and its structured verdict. |
 | `store.py` | SQLite de-duplication and alert history. |
 | `notify.py` | Discord embeds. |

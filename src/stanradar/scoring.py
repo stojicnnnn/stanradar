@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .commute import CommuteTable, resolve_anchor
 from .config import Criteria
 from .models import Listing
 from .text import contains_any, fold
@@ -49,6 +50,24 @@ def _district_tier(listing: Listing, criteria: Criteria) -> tuple[str | None, st
     return None, None
 
 
+def _commute(listing: Listing, criteria: Criteria) -> tuple[int | None, str | None]:
+    """Estimated commute minutes for this listing, or (None, None) if unknown."""
+    cfg = criteria.commute
+    if cfg.max_minutes is None:
+        return None, None
+    # Resolving the anchor builds a merged dict, so cache it: evaluate() runs on every
+    # listing of every cycle, forever.
+    cache_key = (cfg.anchor, tuple(sorted(cfg.areas.items())))
+    table = _ANCHOR_CACHE.get(cache_key)
+    if table is None:
+        table = resolve_anchor(cfg.anchor, cfg.areas)
+        _ANCHOR_CACHE[cache_key] = table
+    return table.estimate(listing.location_text)
+
+
+_ANCHOR_CACHE: dict[tuple[str, tuple[tuple[str, int], ...]], CommuteTable] = {}
+
+
 def evaluate(listing: Listing, criteria: Criteria, full_detail: bool = True) -> RuleResult:
     """Score one listing against the criteria.
 
@@ -80,6 +99,18 @@ def evaluate(listing: Listing, criteria: Criteria, full_detail: bool = True) -> 
     tier, matched_area = _district_tier(listing, criteria)
     if tier == "excluded":
         return RuleResult(False, rejected_for=f"excluded area ({listing.location_text})")
+
+    commute_minutes, commute_area = _commute(listing, criteria)
+    if criteria.commute.max_minutes is not None:
+        if commute_minutes is None:
+            if criteria.commute.unknown == "exclude":
+                return RuleResult(
+                    False, rejected_for=f"unknown area ({listing.location_text})"
+                )
+        elif commute_minutes > criteria.commute.max_minutes:
+            return RuleResult(
+                False, rejected_for=f"~{commute_minutes} min commute ({commute_area})"
+            )
 
     blocked = contains_any(hay, criteria.keywords.blocked)
     if blocked:
@@ -129,6 +160,14 @@ def evaluate(listing: Listing, criteria: Criteria, full_detail: bool = True) -> 
         reasons.append(f"preferred area: {matched_area}")
     elif tier == "acceptable":
         score += 4
+
+    # A shorter commute is the whole point of the location, so it carries real weight:
+    # at the limit it adds nothing, at half the limit it adds most of the 12 points.
+    limit = criteria.commute.max_minutes
+    if limit and commute_minutes is not None:
+        closeness = max(0.0, min(1.0, (limit - commute_minutes) / limit))
+        score += round(closeness * 12)
+        reasons.append(f"~{commute_minutes} min to work ({commute_area})")
 
     # Extra square meters over the floor, worth up to 8 points at +50% of the minimum.
     if listing.area_m2 and criteria.area_m2.min:

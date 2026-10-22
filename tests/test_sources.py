@@ -7,6 +7,7 @@ templates, halooglasi's legend-inside-value markup, and nekretnine's Italian fie
 
 from stanradar.sources.fourzida import FourZida
 from stanradar.sources.halooglasi import HaloOglasi
+from stanradar.sources.kupujemprodajem import KupujemProdajem
 from stanradar.sources.nekretnine import Nekretnine
 from stanradar.sources.oglasi import Oglasi
 
@@ -269,3 +270,80 @@ def test_nekretnine_picks_the_largest_photo():
 def test_nekretnine_skips_a_result_with_no_properties():
     broken = {"seo": {}, "realEstate": {"id": 1, "properties": []}}
     assert Nekretnine(client=None)._to_listing(broken) is None
+
+
+# --- kupujemprodajem -----------------------------------------------------
+
+KP_AD = {
+    "ad_id": 196569675,
+    "ad_url": "/nekretnine-izdavanje/stanovi/gandijeva-blok-63-novi-beograd-beograd/oglas/196569675",
+    "group_name": "Stanovi",
+    "category_name": "Nekretnine | Izdavanje",
+    "currency": "eur",
+    "price": 400,
+    "name_decoded": "Gandijeva, Blok 63, Novi Beograd, Beograd",
+    "description_snippet_decoded": "Novi Beograd - Blok 63",
+    "location_name": "Beograd | Opština Novi Beograd | Blok 63",
+    "posted": "2026-10-22 02:16:39",
+    "photo_path1": "/photos/oglasi/5/67/196569675/196569675_abc.webp",
+    "show_directly_from_owner": True,
+    "is_display_priority": False,
+    "view_count": 12,
+    "ad_attributes": [
+        {
+            "code": "realEstateApartmentSummaryLong",
+            "attributes": [
+                {"code": "realEstateArea", "values": ["49 m²"]},
+                {"code": "realEstateApartmentNumberOfRooms", "values": ["1.5"]},
+                {"code": "realEstateFloorInfo", "values": ["PR/4"]},
+            ],
+        }
+    ],
+}
+
+
+def test_kupujemprodajem_maps_a_search_result():
+    listing = KupujemProdajem(client=None)._to_listing(KP_AD)
+    assert listing.external_id == "196569675"
+    assert listing.url.startswith("https://www.kupujemprodajem.com/nekretnine-izdavanje/")
+    assert listing.price_eur == 400
+    assert listing.area_m2 == 49
+    assert listing.rooms == 1.5
+    # "PR/4" is ground floor of four, the same notation halooglasi uses.
+    assert (listing.floor, listing.total_floors) == (0, 4)
+    assert listing.municipality == "Opština Novi Beograd"
+    assert listing.district == "Blok 63"
+    assert listing.is_agency is False  # KP's "directly from owner" badge
+    assert listing.images == [
+        "https://images.kupujemprodajem.com/photos/oglasi/5/67/196569675/196569675_abc.webp"
+    ]
+
+
+def test_kupujemprodajem_timestamp_is_belgrade_local_not_utc():
+    """A fixed offset would be an hour wrong for half the year and skew the listing age."""
+    listing = KupujemProdajem(client=None)._to_listing(KP_AD)
+    assert listing.posted_at is not None
+    assert listing.posted_at.utcoffset().total_seconds() == 2 * 3600  # CEST in October
+    assert listing.posted_at.hour == 2
+
+
+def test_kupujemprodajem_drops_commercial_premises_and_sales():
+    """The keyword search mixes in Poslovni prostor and sale listings."""
+    commercial = {**KP_AD, "group_name": "Poslovni prostor"}
+    for_sale = {**KP_AD, "category_name": "Nekretnine | Prodaja"}
+    source = KupujemProdajem(client=None)
+    assert source._to_listing(commercial) is None
+    assert source._to_listing(for_sale) is None
+
+
+def test_kupujemprodajem_needs_a_detail_fetch_for_its_photos():
+    """The search payload has one thumbnail, so min_images must not be judged on it."""
+    assert KupujemProdajem.has_detail_fetch is True
+
+
+def test_kupujemprodajem_strips_html_from_descriptions():
+    from stanradar.sources.kupujemprodajem import _strip_html
+
+    text = _strip_html("<p><b>Blok 63</b></p><p>&nbsp;</p><p>50% zakupnine</p>")
+    assert "<" not in text and "&nbsp;" not in text
+    assert "Blok 63" in text and "50% zakupnine" in text

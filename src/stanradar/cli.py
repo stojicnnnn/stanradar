@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 from . import __version__
 from .config import Config
-from .llm import Grader
+from .llm import Grader, MissingCredentials
 from .notify import Discord
 from .runner import Runner
 from .scoring import evaluate
@@ -74,8 +74,11 @@ async def _watch(args: argparse.Namespace, cfg: Config) -> int:
     if cfg.scoring.llm.enabled:
         try:
             grader = Grader(cfg.scoring.llm)
+        except MissingCredentials as exc:
+            log.warning("AI scoring off: %s", exc)
+            log.warning("Continuing with rule scores only - alerts still work.")
         except Exception as exc:
-            log.warning("LLM scoring disabled (%s); falling back to rule scores only", exc)
+            log.warning("AI scoring off (%r); continuing with rule scores only", exc)
 
     runner = Runner(cfg, sources, store, discord, grader, _preferences(cfg), args.dry_run)
     try:

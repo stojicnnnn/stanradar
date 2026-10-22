@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -41,6 +41,20 @@ class Keywords(BaseModel):
     penalty: dict[str, int] = Field(default_factory=dict)
 
 
+class Commute(BaseModel):
+    """Travel-time radius around a workplace, instead of a hand-written district list."""
+
+    anchor: str = "navigator"
+    max_minutes: int | None = None
+    # Merged over the built-in table in commute.py, so you can correct an estimate
+    # without touching code: {"zarkovo": 18}
+    areas: dict[str, int] = Field(default_factory=dict)
+    # What to do with an area the table does not recognise. Portals invent neighbourhood
+    # names constantly, so "include" is the safe default - you would rather check a map
+    # than miss a flat.
+    unknown: Literal["include", "exclude"] = "include"
+
+
 class Criteria(BaseModel):
     price_eur: Range = Range()
     area_m2: Range = Range()
@@ -49,6 +63,7 @@ class Criteria(BaseModel):
     max_price_per_m2: float | None = None
     min_images: int = 0
     districts: Districts = Districts()
+    commute: Commute = Commute()
     keywords: Keywords = Keywords()
     # None = no preference, True = only private owners, False = only agencies.
     owners_only: bool | None = None

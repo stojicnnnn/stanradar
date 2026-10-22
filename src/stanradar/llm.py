@@ -80,11 +80,23 @@ def _facts(listing: Listing) -> str:
     return "\n".join(r for r in rows if r)
 
 
+class MissingCredentials(RuntimeError):
+    """No usable Anthropic credential; raised at startup rather than per listing."""
+
+
 class Grader:
     def __init__(self, cfg: LlmConfig):
         self.cfg = cfg
         # Resolves ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, or an `ant auth login` profile.
         self.client = anthropic.AsyncAnthropic()
+        # The client constructs happily without a credential and only fails when the first
+        # request is built, which would otherwise surface as a per-listing error hours
+        # later. Check once, here, so startup can disable grading with a clear message.
+        if not (self.client.api_key or self.client.auth_token):
+            raise MissingCredentials(
+                "no Anthropic credential found. Set ANTHROPIC_API_KEY in .env, run "
+                "`ant auth login`, or set scoring.llm.enabled: false in config.yaml."
+            )
 
     async def grade(self, listing: Listing, preferences: str) -> Verdict | None:
         """Score one listing. Returns None if the call fails - never raises into the loop."""
@@ -115,6 +127,12 @@ class Grader:
             return None
         except anthropic.APIConnectionError as exc:
             log.warning("llm: connection error for %s (%s)", listing.key, exc)
+            return None
+        except Exception as exc:
+            # Scoring is optional enrichment on top of the rule score. Whatever goes wrong
+            # here - a bad image URL, a schema change, a credential expiring mid-run - must
+            # never take down the poll loop, which is the part that cannot miss a listing.
+            log.warning("llm: unexpected error for %s (%r)", listing.key, exc)
             return None
 
         if response.stop_reason == "refusal":

@@ -19,13 +19,3 @@ class CityExpert(NotImplementedSource):
         "changed - the documented {ptId, cityId, rentOrSale, ...} body now returns 400. The "
         "current shape has to be read off the site's own JS bundle or network traffic."
     )
-
-
-class KupujemProdajem(NotImplementedSource):
-    name = "kupujemprodajem"
-    label = "kupujemprodajem.com"
-    reason = (
-        "the biggest owner-to-owner marketplace, so worth having, but its robots.txt "
-        "disallows /api/, which rules out the clean JSON path. The HTML category URL still "
-        "needs to be identified - the guessed rental paths returned 404."
-    )

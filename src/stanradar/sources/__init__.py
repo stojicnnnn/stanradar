@@ -6,17 +6,18 @@ from ..config import Config
 from .base import ClientPool, Source
 from .fourzida import FourZida
 from .halooglasi import HaloOglasi
+from .kupujemprodajem import KupujemProdajem
 from .nekretnine import Nekretnine
 from .oglasi import Oglasi
-from .pending import CityExpert, KupujemProdajem
+from .pending import CityExpert
 
 REGISTRY: dict[str, type[Source]] = {
     FourZida.name: FourZida,
     HaloOglasi.name: HaloOglasi,
     Nekretnine.name: Nekretnine,
     Oglasi.name: Oglasi,
-    CityExpert.name: CityExpert,
     KupujemProdajem.name: KupujemProdajem,
+    CityExpert.name: CityExpert,
 }
 
 
