@@ -146,3 +146,18 @@ To pause alerts, disable the **watch** workflow in the Actions tab. To check wha
 been doing without digging through logs, the Discord channel is the log — and
 `stanradar recent -n 40` works locally against your own copy if you want the rejection
 reasons.
+
+## Seeing what is live right now
+
+`watch` only ever reports listings it has not seen before, which is what you want running
+24/7 but useless for "show me the current stock". `scan` answers that instead:
+
+```bash
+stanradar scan --profile shared-3 --pages 8          # print them
+stanradar scan --profile shared-3 --pages 8 --send   # post them to Discord
+```
+
+It ignores the seen-state and **records nothing**, so it cannot make the watcher skip a
+later alert. `--pages` sweeps deeper than one page where the source supports it (4zida
+does; the others serve one page), which matters for a rare profile — the newest 25
+listings will almost never contain a three-bedroom place.

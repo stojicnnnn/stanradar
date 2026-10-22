@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from . import __version__
 from .config import Config
 from .llm import Grader, MissingCredentials
+from .models import Listing
 from .notify import Discord
 from .runner import ProfileRuntime, Runner
 from .scoring import evaluate
@@ -146,6 +147,113 @@ async def _test_discord(cfg: Config) -> int:
     return 0
 
 
+async def _scan(args: argparse.Namespace, cfg: Config) -> int:
+    """Show - and optionally send - everything currently listed that matches a profile.
+
+    Distinct from `watch`, which only ever reports listings it has not seen before. This
+    deliberately ignores the seen-state so you can ask "what is live right now", and it
+    never records anything, so it cannot cause the watcher to miss a later alert.
+    """
+    wanted = [p for p in cfg.profiles if args.profile in (None, p.name)]
+    if not wanted:
+        log.error(
+            "no profile named %r; available: %s",
+            args.profile, ", ".join(p.name for p in cfg.profiles),
+        )
+        return 2
+
+    pool = ClientPool(cfg.request_timeout_seconds)
+    try:
+        sources = build(cfg.sources, pool, cfg, pages=args.pages)
+    except ValueError as exc:
+        log.error("%s", exc)
+        await pool.aclose()
+        return 2
+
+    log.info(
+        "scanning %s for %s (%d page%s per source)",
+        ", ".join(s.label for s in sources),
+        ", ".join(p.name for p in wanted),
+        args.pages, "" if args.pages == 1 else "s",
+    )
+
+    listings: list[Listing] = []
+    for source in sources:
+        try:
+            found = await source.fetch_new(limit=args.pages * 40)
+            listings.extend(found)
+            log.info("  %s: %d listings", source.label, len(found))
+        except Exception as exc:
+            log.warning("  %s: failed (%s)", source.label, exc)
+
+    graders: dict[str, Grader] = {}
+    for model in {p.scoring.llm.model for p in wanted if p.scoring.llm.enabled}:
+        try:
+            graders[model] = Grader(
+                next(p.scoring.llm for p in wanted if p.scoring.llm.model == model)
+            )
+        except Exception as exc:
+            log.warning("AI scoring off (%s); using rule scores only", exc)
+
+    sent = 0
+    seen_flats: set[str] = set()
+    for profile in wanted:
+        matches = []
+        for listing in listings:
+            # Cheap pass first, so a detail fetch is never spent on a listing we'd drop.
+            if not evaluate(listing, profile.criteria, full_detail=False).passed:
+                continue
+            matches.append(listing)
+
+        log.info("[%s] %d candidates before detail", profile.name, len(matches))
+        confirmed = []
+        for listing in matches:
+            source = next((s for s in sources if s.name == listing.source), None)
+            if source is not None and source.has_detail_fetch:
+                try:
+                    listing = await source.enrich(listing)
+                except Exception as exc:
+                    log.debug("enrich failed for %s (%s)", listing.key, exc)
+            rules = evaluate(listing, profile.criteria)
+            if rules.passed:
+                confirmed.append((listing, rules))
+
+        confirmed.sort(key=lambda pair: pair[1].score, reverse=True)
+        print(f"\n=== {profile.name}: {len(confirmed)} live match(es)")
+        discord = Discord(profile.discord, pool.plain)
+        for listing, rules in confirmed:
+            # The same flat is often cross-posted; show it once.
+            flat = listing.loose_fingerprint() or listing.key
+            duplicate = flat in seen_flats
+            seen_flats.add(flat)
+
+            beds = listing.bedroom_count()
+            print(
+                f"  [{rules.score:>3}] {listing.price_eur or '?':>5} EUR "
+                f"{listing.area_m2 or '?':>6} m2 "
+                f"{(f'{beds:g}bed' if beds is not None else '?bed'):>5} "
+                f"{'house' if listing.property_type == 'house' else 'flat ':<5} "
+                f"{listing.location_text[:38]:<38}"
+                + ("  [dupe]" if duplicate else "")
+            )
+            print(f"        {listing.url}")
+
+            if args.send and not duplicate:
+                verdict = None
+                grader = graders.get(profile.scoring.llm.model)
+                if grader and profile.scoring.llm.enabled and listing.images:
+                    verdict = await grader.grade(listing, _preferences(profile.criteria))
+                await discord.send_listing(listing, rules, verdict, profile=profile.name)
+                sent += 1
+
+    if args.send:
+        log.info("sent %d listing(s) to Discord", sent)
+    else:
+        log.info("nothing sent - add --send to post these to Discord")
+    await pool.aclose()
+    return 0
+
+
 async def _probe(cfg: Config) -> int:
     """Fetch one page from each configured source and show what the rules make of it."""
     pool = ClientPool(cfg.request_timeout_seconds)
@@ -229,6 +337,14 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     sub.add_parser("probe", help="fetch one page per source and show how rules score it")
+    scan_cmd = sub.add_parser(
+        "scan", help="show everything currently listed that matches, ignoring seen-state"
+    )
+    scan_cmd.add_argument("-p", "--profile", help="only this profile (default: all)")
+    scan_cmd.add_argument(
+        "--pages", type=int, default=5, help="pages to sweep where the source supports it"
+    )
+    scan_cmd.add_argument("--send", action="store_true", help="post the matches to Discord")
     sub.add_parser("sources", help="list available sources")
     sub.add_parser("test-discord", help="send a test message to the webhook")
     recent = sub.add_parser("recent", help="show recently seen listings from the database")
@@ -260,6 +376,8 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_test_discord(cfg))
     if args.command == "probe":
         return asyncio.run(_probe(cfg))
+    if args.command == "scan":
+        return asyncio.run(_scan(args, cfg))
 
     if args.command is None:
         args.command = "watch"

@@ -21,7 +21,7 @@ REGISTRY: dict[str, type[Source]] = {
 }
 
 
-def build(names: list[str], pool: ClientPool, cfg: Config) -> list[Source]:
+def build(names: list[str], pool: ClientPool, cfg: Config, pages: int = 1) -> list[Source]:
     """Instantiate the configured sources, rejecting unknown or unimplemented ones."""
     sources: list[Source] = []
     for name in names:
@@ -46,6 +46,7 @@ def build(names: list[str], pool: ClientPool, cfg: Config) -> list[Source]:
                     price_to=int(max(caps)) if caps else None,
                     m2_from=int(min(floors)) if floors else None,
                     property_types=types,
+                    pages=pages,
                 )
             )
         else:

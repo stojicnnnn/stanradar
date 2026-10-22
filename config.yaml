@@ -271,7 +271,11 @@ profiles:
       # three of you still have a sane commute and there is something to look at.
       commute:
         anchor: panorama
-        max_minutes: 35
+        # 40, not 35. A real listing - 700 EUR, 115 m2, 3 bedrooms on Vojvode Stepe - was
+        # being dropped at "36 minutes" against a 35 limit, on an estimate documented as
+        # +/-5. That is false precision rejecting a genuinely good option. Three people
+        # sharing a larger place can also wear a slightly longer ride than one person can.
+        max_minutes: 40
 
       # Scored against the new office too, but a share can reasonably sit further out.
       districts:

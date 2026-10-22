@@ -73,12 +73,16 @@ class FourZida(Source):
         price_to: int | None = None,
         m2_from: int | None = None,
         property_types: list[str] | None = None,
+        pages: int = 1,
     ):
         super().__init__(client)
         # Broad server-side pre-filter only; everything precise happens locally.
         self.price_to = price_to
         self.m2_from = m2_from
         self.property_types = property_types or ["apartment"]
+        # Normal polling only ever needs page 1 - anything older has been seen already.
+        # `scan` raises this to sweep the standing stock instead of just the newest.
+        self.pages = pages
 
     async def fetch_new(self, limit: int = 40) -> list[Listing]:
         listings: list[Listing] = []
@@ -86,22 +90,25 @@ class FourZida(Source):
             endpoint = self.ENDPOINTS.get(property_type)
             if not endpoint:
                 continue
-            params: list[tuple[str, Any]] = [
-                ("for", "rent"),
-                ("placeIds[]", BELGRADE_PLACE_ID),
-                ("sort", "createdAtDesc"),
-                ("page", 1),
-            ]
-            if self.price_to:
-                # Headroom, so a listing priced slightly over still gets scored and logged.
-                params.append(("priceTo", int(self.price_to * 1.2)))
-            if self.m2_from:
-                params.append(("m2From", max(1, int(self.m2_from * 0.8))))
+            for page in range(1, self.pages + 1):
+                params: list[tuple[str, Any]] = [
+                    ("for", "rent"),
+                    ("placeIds[]", BELGRADE_PLACE_ID),
+                    ("sort", "createdAtDesc"),
+                    ("page", page),
+                ]
+                if self.price_to:
+                    # Headroom, so a listing priced slightly over is still scored and logged.
+                    params.append(("priceTo", int(self.price_to * 1.2)))
+                if self.m2_from:
+                    params.append(("m2From", max(1, int(self.m2_from * 0.8))))
 
-            response = await self.http.get(f"{API}/search/{endpoint}", params=params)
-            response.raise_for_status()
-            ads = response.json().get("ads", [])
-            listings.extend(self._to_listing(ad, property_type) for ad in ads[:limit])
+                response = await self.http.get(f"{API}/search/{endpoint}", params=params)
+                response.raise_for_status()
+                ads = response.json().get("ads", [])
+                if not ads:
+                    break
+                listings.extend(self._to_listing(ad, property_type) for ad in ads[:limit])
         return listings
 
     def _to_listing(self, ad: dict[str, Any], property_type: str = "apartment") -> Listing:
