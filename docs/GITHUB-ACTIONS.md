@@ -216,3 +216,22 @@ runs overlapping, so a duplicate trigger queues rather than double-alerting.
 The cost is that a third party holds a token that can start one workflow in one repo. If
 that is not a trade you want, the alternatives are a VPS ([DEPLOY.md](DEPLOY.md)) or any
 always-on machine at home.
+
+## Fallback: this machine, no token, no third party
+
+The least-dependency option. One command registers a Windows scheduled task that runs a
+cycle every 10 minutes:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deployegister-windows-task.ps1
+powershell -ExecutionPolicy Bypass -File deployegister-windows-task.ps1 -Remove
+```
+
+It reads `config.yaml` and `.env` from the repo exactly as `watch` does, refuses to install
+if the virtualenv or config is missing, and is safe to re-run - it replaces the task rather
+than stacking a second one. `-StartWhenAvailable` makes it catch up after the machine was
+asleep at a trigger time.
+
+**Its one real weakness:** it only polls while the machine is awake. If the PC sleeps
+overnight you miss everything posted overnight, and a fair share of listings appear early.
+Disable sleep if you lean on this, or treat it as a stopgap rather than the answer.

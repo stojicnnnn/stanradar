@@ -119,9 +119,13 @@ Two ways to do it:
   the setup, what becomes public, and the one real unknown: whether the portals block
   GitHub's Azure IP ranges.
 
-On Windows, Task Scheduler with "run whether user is logged on or not" and a trigger at
-startup, pointing at `.venv\Scripts\stanradar.exe watch`. Disable sleep, or it will not
-be running when it matters.
+On Windows, one command registers a scheduled task that polls every 10 minutes:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deployegister-windows-task.ps1
+```
+
+Disable sleep if you rely on it — a sleeping PC misses exactly the listings you want.
 
 If a portal fails five polls in a row you get one Discord warning, not one per cycle.
 Polling continues regardless — one portal being down never stops the others.
