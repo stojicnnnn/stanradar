@@ -172,3 +172,47 @@ It ignores the seen-state and **records nothing**, so it cannot make the watcher
 later alert. `--pages` sweeps deeper than one page where the source supports it (4zida
 does; the others serve one page), which matters for a rare profile — the newest 25
 listings will almost never contain a three-bedroom place.
+
+## Fallback: trigger from an external cron
+
+GitHub's *scheduler* and its *dispatch API* are separate systems, and they fail
+independently. Measured on this repo: over 131 minutes with Actions degraded, `schedule`
+produced **zero** runs while `POST .../dispatches` kept returning `204` every time.
+
+So if the schedule stays dead, drive the workflow from outside GitHub. This is not a
+workaround for a broken config — it is a genuinely more reliable trigger, because a free
+external cron service only has to do one thing and GitHub only has to accept one API call.
+
+**1. Create a fine-grained token.** github.com → Settings → Developer settings →
+Fine-grained tokens → Generate new token:
+
+- Repository access: **Only select repositories** → `stanradar`
+- Permissions → Repository → **Actions: Read and write** (nothing else)
+- Expiration: 90 days or whatever you will remember to rotate
+
+Scoped this way the token can start a workflow in this one repo and nothing more. It cannot
+read your other repos, push code, or change settings. The repo is public anyway, so it
+grants no read access you have not already given the world.
+
+**2. Point a free cron at it.** [cron-job.org](https://cron-job.org) is free and needs no
+card. Create a job:
+
+| Field | Value |
+|---|---|
+| URL | `https://api.github.com/repos/<you>/stanradar/actions/workflows/watch.yml/dispatches` |
+| Method | `POST` |
+| Schedule | every 10 minutes |
+| Header | `Authorization: Bearer <your token>` |
+| Header | `Accept: application/vnd.github+json` |
+| Body | `{"ref":"main"}` |
+
+A success is **HTTP 204 No Content** with an empty body — cron-job.org may show that as a
+failure if it expects 200, so check the response code rather than the status icon.
+
+**3. Turn the GitHub schedule off** so the two do not both fire. Either delete the
+`schedule:` block from `watch.yml`, or leave it — the `concurrency` group already stops two
+runs overlapping, so a duplicate trigger queues rather than double-alerting.
+
+The cost is that a third party holds a token that can start one workflow in one repo. If
+that is not a trade you want, the alternatives are a VPS ([DEPLOY.md](DEPLOY.md)) or any
+always-on machine at home.
